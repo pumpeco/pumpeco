@@ -70,7 +70,8 @@ export default function Create({ cfg }) {
       setStep('send');
       const r = await api.submitLaunch(p.mint, signed);
       // an allow/blocklist is filled right after the launch: the creator signs the list transactions in one approval
-      if (listed && (listed.wallets.length || rf.seal)) {
+      // ⛔ an allowlist sealed with nobody on it would be a coin nobody can buy, forever: an empty list is never sealed
+      if (listed && listed.wallets.length) {
         setStep('list'); setLive(r.mint);
         try {
           const { tooLate } = await fillList({ mint: r.mint, wallet, wallets: listed.wallets, seal: rf.seal, signTransactions: w.signTransactions, onProgress: setListStep });
@@ -160,7 +161,8 @@ export default function Create({ cfg }) {
             <div><span className="muted">creator rewards:</span> {rewards === 'holders' ? 'Holders' : 'Creator'}</div>
             <div><span className="muted">max per wallet:</span> {maxWalletPct && !rf.on.chapters ? `${maxWalletPct}% of supply` : 'off'}</div>
             {ruleLines.length > 0 && <div><div className="muted">rules on its curve, until it migrates:</div><RulesLines lines={ruleLines} className="xs" /></div>}
-            {listed && <div><span className="muted">list:</span> {listed.wallets.length} wallet{listed.wallets.length === 1 ? '' : 's'}{rf.seal ? ', sealed right after launch' : ''}. you approve the list transactions in your wallet after the launch.</div>}
+            {listed && listed.wallets.length > 0 && <div><span className="muted">list:</span> {listed.wallets.length} wallet{listed.wallets.length === 1 ? '' : 's'}{rf.seal ? ', sealed right after launch' : ''}. you approve the list transactions in your wallet after the launch.</div>}
+            {listed && listed.wallets.length === 0 && <div><span className="muted">list:</span> empty for now. {rf.on.allowlist ? 'nobody but you can buy until you add wallets from the coin page (within a day).' : 'add wallets from the coin page within a day.'}</div>}
             {windows.limits?.firstBuy && Number(devBuy) > 0 && <div><span className="muted">your first buy:</span> {Number(devBuy)} SOL, inside the launch</div>}
           </div>
           <p className="muted xs">everything above is written on chain at launch and cannot be changed after.</p>

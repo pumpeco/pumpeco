@@ -168,7 +168,7 @@ export async function listTxs({ mint, creator, wallets, seal }) {
   const raw = Array.isArray(wallets) ? wallets : [];
   if (raw.length > LIST_MAX) throw new ApiError(`A list holds at most ${LIST_MAX} wallets.`);
   const keys = [];
-  for (const w of raw) { if (!sol.isAddress(String(w).trim())) throw new ApiError(`Not a wallet address: ${String(w).slice(0, 60)}`); keys.push(new PublicKey(String(w).trim())); }
+  for (const w of raw) { if (!sol.isKey(String(w).trim())) throw new ApiError(`Not a wallet address: ${String(w).slice(0, 60)}`); keys.push(new PublicKey(String(w).trim())); } // any valid key: a multisig vault (a PDA) may be listed too
   const a = await sol.conn.getAccountInfo(hookPdas(HOOK_PROGRAM, m).list, 'confirmed');
   const cur = a ? decodeList(a.data) : null;
   if (cur?.sealed) throw new ApiError('The list is sealed.');
@@ -182,8 +182,12 @@ export async function submitList({ mint, transaction }) {
   const m = sol.requireMint(mint).toBase58();
   const tx = sol.parseTx(transaction, 'The list transaction');
   const msg = tx.message, keys = msg.staticAccountKeys;
-  const ixs = msg.compiledInstructions.filter((ix) => !keys[ix.programIdIndex].equals(new PublicKey('ComputeBudget111111111111111111111111111111')));
-  if (!ixs.length || !ixs.every((ix) => keys[ix.programIdIndex].equals(HOOK_PROGRAM) && (Buffer.from(ix.data).subarray(0, 8).toString() === 'hkLstAdd' || Buffer.from(ix.data).subarray(0, 8).toString() === 'hkLstSel'))) throw new ApiError('Not a list transaction.', 400);
+  const keyAt = (i) => keys[i] ?? null; // a lookup-table index has no static key: refused, never a crash
+  const ixs = msg.compiledInstructions.filter((ix) => !keyAt(ix.programIdIndex)?.equals(new PublicKey('ComputeBudget111111111111111111111111111111')));
+  const mintKey = new PublicKey(m);
+  const isListIx = (ix) => keyAt(ix.programIdIndex)?.equals(HOOK_PROGRAM) && ['hkLstAdd', 'hkLstSel'].includes(Buffer.from(ix.data).subarray(0, 8).toString())
+    && keyAt(ix.accountKeyIndexes[1])?.equals(mintKey); // account 1 of a list instruction is the mint: the relay only serves the coin it was asked about
+  if (!ixs.length || !ixs.every(isListIx)) throw new ApiError('Not a list transaction.', 400);
   const r = await rulesOnChain(m);
   if (!r || !keys[0].equals(r.dev)) throw new ApiError('Not signed by the coin\'s creator.', 403);
   if (!tx.signatures[0] || tx.signatures[0].every((b) => b === 0)) throw new ApiError('Not signed by the wallet', 400);

@@ -73,9 +73,9 @@ function ListPanel({ c, onDone }) {
       {err && <div className="err">{err}</div>}
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn small" disabled={Boolean(busy) || !parsed.wallets.length || parsed.invalid.length > 0} onClick={() => go(false)}>{busy ? <><Spinner /> {busy}</> : `add ${parsed.wallets.length || ''} wallets`}</button>
-        <button className="btn small ghost" disabled={Boolean(busy) || parsed.invalid.length > 0} onClick={() => go(true)}>{parsed.wallets.length ? 'add and seal' : 'seal the list'}</button>
+        <button className="btn small ghost" disabled={Boolean(busy) || parsed.invalid.length > 0 || (c.window.rules?.allowlist && (c.window.list?.count ?? 0) + parsed.wallets.length === 0)} onClick={() => go(true)}>{parsed.wallets.length ? 'add and seal' : 'seal the list'}</button>
       </div>
-      <div className="muted xs">24 wallets per transaction, one approval per batch. sealing is for good.</div>
+      <div className="muted xs">24 wallets per transaction, one approval per batch. sealing is for good{c.window.rules?.allowlist ? '; an allowlist cannot be sealed empty' : ''}.</div>
     </div>
   );
 }

@@ -2,9 +2,9 @@
 // one wallet approval, the site relays them in order (the program only ever appends above the last listed wallet).
 import { api } from './api.js';
 
-// ⚠ one approval signs a batch against one blockhash, which expires after about a minute: 10 transactions, sent one
-// after another, land well inside that
-const BATCH = 240;
+// ⚠ one approval signs a batch against one blockhash, which expires after about a minute, and each transaction is confirmed
+// before the next is sent: 4 transactions leave room for a slow chain
+const BATCH = 96;
 
 /**
  * Puts `wallets` on the coin's list and, with `seal`, seals it in the last transaction. `signTransactions` is the
@@ -23,7 +23,7 @@ export async function fillList({ mint, wallet, wallets, seal, signTransactions, 
     onProgress(`approve ${built.transactions.length} list transaction${built.transactions.length === 1 ? '' : 's'} in your wallet`);
     const signed = await signTransactions(built.transactions);
     for (let i = 0; i < signed.length; i++) {
-      onProgress(`filling the list: ${Math.min(wallets.length, done + (i + 1) * 24)} of ${wallets.length}`);
+      onProgress(`filling the list: ${Math.min(wallets.length, done + (i + 1) * 24)} of ${wallets.length}`); // 24 wallets per transaction (hk/lib/rules.mjs LIST_ADD_MAX)
       await api.submitList(mint, signed[i]);
     }
     done += batches[b].length;

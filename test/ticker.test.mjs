@@ -20,6 +20,13 @@ test('anti-vamp: the lock ends after a day; failed launches never hold it', () =
   row('m3', 'BAD', 'failed', 'walletA', 1000);
   assert.equal(tickerLockedFor('BAD', 'walletB'), 0);
 });
+test('anti-vamp at submit (landedOnly): only landed coins count, so two wallets prepared at once do not refuse each other', () => {
+  row('m7', 'RACE', 'prepared', 'walletA', 60_000);
+  assert.ok(tickerLockedFor('RACE', 'walletB') > 0, 'at prepare the other wallet waits');
+  assert.equal(tickerLockedFor('RACE', 'walletB', { landedOnly: true }), 0, 'at submit a prepared row does not block');
+  row('m8', 'RACE', 'created', 'walletC', 1000);
+  assert.ok(tickerLockedFor('RACE', 'walletB', { landedOnly: true }) > 0, 'a landed (confirming) coin blocks the submit');
+});
 test('anti-vamp: a prepared launch holds the ticker 15 minutes for other wallets only, hidden coins hold it a day', () => {
   row('m4', 'PREP', 'prepared', 'walletA', 60_000);
   assert.ok(tickerLockedFor('PREP', 'walletB') > 0 && tickerLockedFor('PREP', 'walletB') <= 14 * 60_000 + 1000, 'another wallet waits');

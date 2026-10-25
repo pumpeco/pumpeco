@@ -222,13 +222,14 @@ export async function prepare(body, ip = null) {
 }
 /** Anti-vamp: a ticker launched here is this wallet's alone for a day. How long is left, in ms, or 0 when the ticker is free. */
 export const TICKER_LOCK_MS = 86_400_000;
-export function tickerLockedFor(symbol, launcher) {
+export function tickerLockedFor(symbol, launcher, { landedOnly = false } = {}) {
   // a landed or confirming coin (hidden ones too) holds its ticker for a day; a prepared launch by ANOTHER wallet holds it
-  // for the 15 minutes it may still be signed, so an abandoned prepare cannot squat a ticker for a day
+  // for the 15 minutes it may still be signed, so an abandoned prepare cannot squat a ticker for a day.
+  // `landedOnly` (at submit): prepared rows do not count, or two wallets prepared in the same minute would refuse EACH OTHER
   const t = now();
   const r = one(`SELECT status, created_at FROM launches WHERE symbol = ? COLLATE NOCASE AND status <> 'failed'
-    AND ((status <> 'prepared' AND created_at > ?) OR (status = 'prepared' AND launcher <> ? AND created_at > ?))
-    ORDER BY created_at DESC LIMIT 1`, symbol, t - TICKER_LOCK_MS, launcher, t - 900_000);
+    AND ((status <> 'prepared' AND created_at > ?) OR (status = 'prepared' AND ? = 0 AND launcher <> ? AND created_at > ?))
+    ORDER BY created_at DESC LIMIT 1`, symbol, t - TICKER_LOCK_MS, landedOnly ? 1 : 0, launcher, t - 900_000);
   if (!r) return 0;
   return r.status === 'prepared' ? 900_000 - (t - r.created_at) : TICKER_LOCK_MS - (t - r.created_at);
 }
@@ -264,6 +265,7 @@ async function prepareFor(launcher, body, ip) {
   // A row marked failed whose coin is on chain after all (a lost answer) is the live coin: never deleted or re-prepared.
   if (prior && (await onChain(m).catch(() => true))) { markLive(prior, prior.sig); throw new ApiError('This coin already exists on chain. It is live on the board.', 409); }
   if (prior) run('DELETE FROM launches WHERE mint = ?', m);
+  const tickerFree = () => { const left = tickerLockedFor(form.symbol, launcher); if (left > 0) throw new ApiError(`The ticker ${form.symbol} was launched here in the last 24 hours. A ticker can be used once a day on pump.eco: pick another one, or try again in ${leftText(left)}.`, 409); };
   let tx, hash, expectedTokens = 0n, extra = {};
   if (win) {
     const b = await window.build({ launcher, name: form.name, symbol: form.symbol, uri: meta.uri, window: { ...win, holderRewards: form.holderRewards }, mint, devBuyLamports: form.devBuyLamports });
@@ -277,6 +279,9 @@ async function prepareFor(launcher, body, ip) {
     console.error(`[launch] prepare simulation failed for ${m}: ${why} ${(sim.value.logs || []).slice(-3).join(' | ').slice(0, 300)}`);
     throw new ApiError(/InsufficientFunds|insufficient lamports/i.test(why + logs) ? 'This launch would be refused on chain: the wallet does not hold enough SOL for it. Nothing was sent.' : `This launch would be refused on chain (${why.slice(0, 120)}). Nothing was sent.`, 400);
   }
+  // ⛔ checked AGAIN with no await between the check and the insert (sqlite is synchronous): two wallets preparing the same
+  //    ticker at once both passed the first check seconds ago; only the first to reach this line gets a row
+  tickerFree();
   run(`INSERT INTO launches (mint, launcher, name, symbol, description, image, metadata_uri, socials_json, dev_buy_lamports, tx_hash, mint_secret, status, created_at, bumped_at, updated_at, kind, pool, config, size_sol, open_secs, window_minutes, holder_rewards)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   m, launcher, form.name, form.symbol, form.description, shownImage, meta.uri, JSON.stringify(form.socials), String(form.devBuyLamports), hash, JSON.stringify([...mint.secretKey]), now(), now(), now(),
@@ -320,6 +325,8 @@ export async function submit({ mint, transaction }) {
   if (row.status === 'live') return { mint, status: 'live', sig: row.sig };
   const tx = sol.parseTx(transaction, 'The launch');
   checkLaunchTx(tx, row);
+  // anti-vamp, last look before anything is sent: a coin with this ticker landed while this one was being signed
+  if (row.status === 'prepared') { const left = tickerLockedFor(row.symbol, row.launcher, { landedOnly: true }); if (left > 0) throw new ApiError(`The ticker ${row.symbol} was launched here while you were signing. A ticker can be used once a day on pump.eco: pick another one. Nothing was sent.`, 409); }
   if (inFlight.has(mint)) throw new ApiError('This launch is already being sent.', 409);
   inFlight.add(mint);
   try {
