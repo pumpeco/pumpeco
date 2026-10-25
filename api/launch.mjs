@@ -220,8 +220,23 @@ export async function prepare(body, ip = null) {
     preparing.delete(launcher);
   }
 }
+/** Anti-vamp: a ticker launched here is this wallet's alone for a day. How long is left, in ms, or 0 when the ticker is free. */
+export const TICKER_LOCK_MS = 86_400_000;
+export function tickerLockedFor(symbol, launcher) {
+  // a landed or confirming coin (hidden ones too) holds its ticker for a day; a prepared launch by ANOTHER wallet holds it
+  // for the 15 minutes it may still be signed, so an abandoned prepare cannot squat a ticker for a day
+  const t = now();
+  const r = one(`SELECT status, created_at FROM launches WHERE symbol = ? COLLATE NOCASE AND status <> 'failed'
+    AND ((status <> 'prepared' AND created_at > ?) OR (status = 'prepared' AND launcher <> ? AND created_at > ?))
+    ORDER BY created_at DESC LIMIT 1`, symbol, t - TICKER_LOCK_MS, launcher, t - 900_000);
+  if (!r) return 0;
+  return r.status === 'prepared' ? 900_000 - (t - r.created_at) : TICKER_LOCK_MS - (t - r.created_at);
+}
+const leftText = (ms) => (ms >= 3_600_000 ? `${Math.ceil(ms / 3_600_000)} hours` : `${Math.max(1, Math.ceil(ms / 60_000))} minutes`);
+
 async function prepareFor(launcher, body, ip) {
   const form = validate(body);
+  { const left = tickerLockedFor(form.symbol, launcher); if (left > 0) throw new ApiError(`The ticker ${form.symbol} was launched here in the last 24 hours. A ticker can be used once a day on pump.eco: pick another one, or try again in ${leftText(left)}.`, 409); }
   const win = body.window ? window.validateWindow(body.window) : null;
   const pair = win ? await window.validatePair(body.window.pair, body.window.pumpCreatorFeeBps) : null;
   if (win && form.devBuyLamports > 0n && !window.FIRST_BUY) throw new ApiError('A first buy is not available yet.');
