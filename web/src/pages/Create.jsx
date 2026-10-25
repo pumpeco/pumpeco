@@ -53,7 +53,18 @@ export default function Create({ cfg }) {
     setError(null);
     setImageData(await readFile(f));
   };
-  const ready = form.name.trim() && /^[A-Za-z0-9]{1,10}$/.test(form.symbol.trim()) && imageData;
+  // the ticker lock, checked as the creator types (api/launch.mjs tickerStatus): a hint before the image and the signing,
+  // the refusal proper is at prepare and submit
+  const [tick, setTick] = useState(null); // { symbol, locked, text } for the symbol typed, or null
+  const symbol = form.symbol.trim().toUpperCase();
+  useEffect(() => {
+    if (!/^[A-Z0-9]{1,10}$/.test(symbol)) { setTick(null); return; }
+    let alive = true;
+    const id = setTimeout(() => { api.tickerStatus(symbol).then((t) => { if (alive && t?.symbol === symbol) setTick(t); }).catch(() => {}); }, 350);
+    return () => { alive = false; clearTimeout(id); };
+  }, [symbol]);
+  const tickerLocked = Boolean(tick?.locked && tick.symbol === symbol);
+  const ready = form.name.trim() && /^[A-Za-z0-9]{1,10}$/.test(form.symbol.trim()) && imageData && !tickerLocked;
 
   const launch = async () => {
     setError(null);
@@ -94,7 +105,9 @@ export default function Create({ cfg }) {
       <div className="narrow">
         <Link href="/" className="bracket">[go back]</Link>
         <div className="field"><label>name</label><input value={form.name} onChange={set('name')} maxLength={32} /></div>
-        <div className="field"><label>ticker</label><input value={form.symbol} onChange={set('symbol')} maxLength={10} /></div>
+        <div className="field"><label>ticker</label><input value={form.symbol} onChange={set('symbol')} maxLength={10} />
+          {tickerLocked && <div className="err">{tick.text}</div>}
+          {tick && !tick.locked && tick.symbol === symbol && <div className="muted xs">{symbol} is free.</div>}</div>
         <div className="field"><label>description</label><textarea value={form.description} onChange={set('description')} maxLength={1000} /></div>
         <div className="field">
           <label>image</label>

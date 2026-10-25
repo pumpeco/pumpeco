@@ -234,6 +234,18 @@ export function tickerLockedFor(symbol, launcher, { landedOnly = false } = {}) {
   return r.status === 'prepared' ? 900_000 - (t - r.created_at) : TICKER_LOCK_MS - (t - r.created_at);
 }
 const leftText = (ms) => (ms >= 3_600_000 ? `${Math.ceil(ms / 3_600_000)} hours` : `${Math.max(1, Math.ceil(ms / 60_000))} minutes`);
+/**
+ * For the create page, as the creator types: is this ticker free right now? Only landed launches count (a stranger's
+ * prepare that may never be signed is not a reason to steer someone away), so the answer is a hint; prepare and submit
+ * are the checks. `symbol` is trimmed and upper-cased here; anything that is not a ticker reads as free.
+ */
+export function tickerStatus(symbol) {
+  const s = String(symbol ?? '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{1,10}$/.test(s)) return { symbol: s, locked: false, left: 0, text: null };
+  const left = tickerLockedFor(s, '', { landedOnly: true });
+  if (left <= 0) return { symbol: s, locked: false, left: 0, text: null };
+  return { symbol: s, locked: true, left, text: `${s} was launched here in the last 24 hours. a ticker can be used once a day on pump.eco: pick another one, or come back in ${leftText(left)}.` };
+}
 
 async function prepareFor(launcher, body, ip) {
   const form = validate(body);

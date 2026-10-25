@@ -69,6 +69,7 @@ route('GET', '/api/coins/:mint/replies', async ({ params }) => coins.replies(min
 // the chart and the trades tab, from the chain: indexes what is new first (rate-limited per coin), then answers
 route('GET', '/api/coins/:mint/chart', async ({ params, ip, query }) => { limit(ip, 'chart', 240, 600_000); const m = mintOf(params); const c = await coins.coin(m); /* 404 unless listed: never index a stranger's coin */ history.index(m); return { ...history.chart(m, c?.priceSol ?? null, query.get('interval')), supply: c?.capSol && c?.priceSol ? c.capSol / c.priceSol : 1e9 }; });
 route('POST', '/api/coins/:mint/replies', async ({ params, body, ip }) => { limit(ip, 'reply', 30, 600_000); return coins.postReply({ ...body, mint: mintOf(params) }); });
+route('GET', '/api/launch/ticker', async ({ query, ip }) => { limit(ip, 'tickercheck', 240, 600_000); return launch.tickerStatus(query.get('symbol')); });
 route('POST', '/api/launch/prepare', async ({ body, ip }) => { limit(ip, 'prepare', 10, 3_600_000); return launch.prepare(body, ip); });
 route('POST', '/api/launch/submit', async ({ body, ip }) => { limit(ip, 'submit', 20, 3_600_000); return launch.submit(body); });
 route('POST', '/api/launch/list', async ({ body, ip }) => { limit(ip, 'list', 60, 600_000); return window.listTxs({ mint: String(body.mint || ''), creator: String(body.wallet || ''), wallets: body.wallets, seal: body.seal }); });

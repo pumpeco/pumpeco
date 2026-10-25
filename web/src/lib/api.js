@@ -18,6 +18,7 @@ export const api = {
   pairs: () => req('/api/pairs'),
   pair: (mint) => req(`/api/pairs/${mint}`),
   reply: (mint, data) => post(`/api/coins/${mint}/replies`, data),
+  tickerStatus: (symbol) => req(`/api/launch/ticker?symbol=${encodeURIComponent(symbol)}`),
   prepareLaunch: (form) => post('/api/launch/prepare', form),
   submitLaunch: (mint, transaction) => post('/api/launch/submit', { mint, transaction }),
   listTxs: (data) => post('/api/launch/list', data),
