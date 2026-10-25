@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hook upgrade</title>
+<style>
+  :root { --bg: #0b0b0e; --panel: #131316; --line: #232327; --text: #e4e4e7; --muted: #a1a1aa; --accent: #86efac; --bad: #f87171; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; padding: 16px; box-sizing: border-box; }
+  .card { width: 100%; max-width: 520px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
+  h1 { font-size: 22px; margin: 0 0 6px; } p { color: var(--muted); margin: 6px 0; } code { font-size: 12.5px; color: var(--text); word-break: break-all; }
+  button { width: 100%; height: 46px; border-radius: 999px; border: 0; background: var(--accent); color: #052e16; font-weight: 600; font-size: 15px; cursor: pointer; margin-top: 10px; }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .6; cursor: progress; }
+  #log { margin-top: 16px; font-size: 13.5px; white-space: pre-wrap; } .bad { color: var(--bad); } .good { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Upgrade the pump.eco hook</h1>
+  <p>Program <code>%PROGRAM%</code></p>
+  <p>New build sha256 <code>%SHA%…</code></p>
+  <p>Sign with the cold wallet <code>%COLD%</code>. One transaction: the upgrade, already simulated on mainnet. The buffer's rent comes back to the cold wallet.</p>
+  <div id="wallets"></div>
+  <button id="go" disabled>Connect a wallet first</button>
+  <div id="log"></div>
+</div>
+<script type="module">
+import { getWallets } from "https://esm.sh/@wallet-standard/app@1.1.0";
+const COLD = "%COLD%";
+const log = (t, cls = "") => { const d = document.createElement("div"); d.textContent = t; d.className = cls; document.getElementById("log").append(d); };
+const b64 = { to: (u) => btoa(String.fromCharCode(...u)), from: (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0)) };
+let wallet = null, account = null;
+const { get, on } = getWallets();
+function render() {
+  const box = document.getElementById("wallets"); box.innerHTML = "";
+  for (const w of get().filter((w) => w.features["solana:signTransaction"] && w.features["standard:connect"])) {
+    const b = document.createElement("button"); b.className = "ghost"; b.textContent = `Connect ${w.name}`;
+    b.onclick = async () => {
+      try {
+        await w.features["standard:connect"].connect();
+        const a = w.accounts.find((x) => x.address === COLD);
+        if (!a) { log(`${w.name} is connected to ${w.accounts.map((x) => x.address).join(", ") || "no account"}, not the cold wallet. Switch to ${COLD} in the wallet and connect again.`, "bad"); return; }
+        wallet = w; account = a;
+        const go = document.getElementById("go"); go.disabled = false; go.textContent = "Sign and upgrade";
+        log(`Connected the cold wallet in ${w.name}.`, "good");
+      } catch (e) { log(`Connect failed: ${e.message}`, "bad"); }
+    };
+    box.append(b);
+  }
+}
+render(); on("register", render);
+document.getElementById("go").onclick = async () => {
+  const go = document.getElementById("go"); go.disabled = true;
+  try {
+    const r = await fetch("/txs").then((x) => x.json());
+    if (r.done) { log("The deployed program already matches the build. Nothing to do.", "good"); return; }
+    if (r.error) throw new Error(r.error);
+    log(r.extend ? `Extending the program account by ${r.extend.toLocaleString()} bytes, then upgrading. Approve in the wallet.` : "Upgrading. Approve in the wallet.");
+    const outs = await wallet.features["solana:signTransaction"].signTransaction(...r.txs.map((t) => ({ account, transaction: b64.from(t), chain: "solana:mainnet" })));
+    log("Signed. Sending…");
+    const s = await fetch("/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ txs: outs.map((o) => b64.to(o.signedTransaction)) }) }).then((x) => x.json());
+    if (s.error) throw new Error(s.error);
+    for (const sig of s.sigs) log(`landed: ${sig}`);
+    log(s.matches ? "Done. The deployed program matches the tested build." : "Sent, but the deployed bytes do not match the build yet. Run the check again in a moment.", s.matches ? "good" : "bad");
+  } catch (e) { log(e.message, "bad"); go.disabled = false; }
+};
+</script>
+</body>
+</html>

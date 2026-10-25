@@ -1,0 +1,12 @@
+node_modules/
+data/
+web/dist/
+.env
+.env.local
+tools/grind/target/
+e2e/ledger/
+e2e/validator.log
+hk/hook/target/
+hk/keys/*.json
+!hk/keys/hook-keypair.json
+data/
