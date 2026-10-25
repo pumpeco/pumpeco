@@ -19,8 +19,8 @@ export function Header() {
   const path = usePath();
   const nav = (cls) => (
     <nav className={`navpills ${cls}`}>
-      <Link href="/how" className={path === '/how' ? 'active' : ''}>How it works</Link>
       <Link href="/create" className={path === '/create' ? 'active' : ''}>Launch</Link>
+      <Link href="/how" className={path === '/how' ? 'active' : ''}>How it works</Link>
     </nav>
   );
   return (
