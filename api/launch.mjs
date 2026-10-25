@@ -221,7 +221,7 @@ export async function prepare(body, ip = null) {
   }
 }
 /** Anti-vamp: a ticker launched here is this wallet's alone for a day. How long is left, in ms, or 0 when the ticker is free. */
-export const TICKER_LOCK_MS = 86_400_000;
+export const TICKER_LOCK_MS = 7 * 86_400_000; // 7 days (operator, 25 Oct; was 24 hours)
 export function tickerLockedFor(symbol, launcher, { landedOnly = false } = {}) {
   // a landed or confirming coin (hidden ones too) holds its ticker for a day; a prepared launch by ANOTHER wallet holds it
   // for the 15 minutes it may still be signed, so an abandoned prepare cannot squat a ticker for a day.
@@ -233,7 +233,7 @@ export function tickerLockedFor(symbol, launcher, { landedOnly = false } = {}) {
   if (!r) return 0;
   return r.status === 'prepared' ? 900_000 - (t - r.created_at) : TICKER_LOCK_MS - (t - r.created_at);
 }
-const leftText = (ms) => (ms >= 3_600_000 ? `${Math.ceil(ms / 3_600_000)} hours` : `${Math.max(1, Math.ceil(ms / 60_000))} minutes`);
+const leftText = (ms) => (ms > 2 * 86_400_000 ? `${Math.ceil(ms / 86_400_000)} days` : ms >= 3_600_000 ? `${Math.ceil(ms / 3_600_000)} hours` : `${Math.max(1, Math.ceil(ms / 60_000))} minutes`);
 /**
  * For the create page, as the creator types: is this ticker free right now? Only landed launches count (a stranger's
  * prepare that may never be signed is not a reason to steer someone away), so the answer is a hint; prepare and submit
@@ -244,12 +244,12 @@ export function tickerStatus(symbol) {
   if (!/^[A-Z0-9]{1,10}$/.test(s)) return { symbol: s, locked: false, left: 0, text: null };
   const left = tickerLockedFor(s, '', { landedOnly: true });
   if (left <= 0) return { symbol: s, locked: false, left: 0, text: null };
-  return { symbol: s, locked: true, left, text: `${s} was launched here in the last 24 hours. a ticker can be used once a day on pump.eco: pick another one, or come back in ${leftText(left)}.` };
+  return { symbol: s, locked: true, left, text: `${s} was launched here in the last 7 days. a ticker can be used once a week on pump.eco: pick another one, or come back in ${leftText(left)}.` };
 }
 
 async function prepareFor(launcher, body, ip) {
   const form = validate(body);
-  { const left = tickerLockedFor(form.symbol, launcher); if (left > 0) throw new ApiError(`The ticker ${form.symbol} was launched here in the last 24 hours. A ticker can be used once a day on pump.eco: pick another one, or try again in ${leftText(left)}.`, 409); }
+  { const left = tickerLockedFor(form.symbol, launcher); if (left > 0) throw new ApiError(`The ticker ${form.symbol} was launched here in the last 7 days. A ticker can be used once a week on pump.eco: pick another one, or try again in ${leftText(left)}.`, 409); }
   const win = body.window ? window.validateWindow(body.window) : null;
   const pair = win ? await window.validatePair(body.window.pair, body.window.pumpCreatorFeeBps) : null;
   if (win && form.devBuyLamports > 0n && !window.FIRST_BUY) throw new ApiError('A first buy is not available yet.');
@@ -277,7 +277,7 @@ async function prepareFor(launcher, body, ip) {
   // A row marked failed whose coin is on chain after all (a lost answer) is the live coin: never deleted or re-prepared.
   if (prior && (await onChain(m).catch(() => true))) { markLive(prior, prior.sig); throw new ApiError('This coin already exists on chain. It is live on the board.', 409); }
   if (prior) run('DELETE FROM launches WHERE mint = ?', m);
-  const tickerFree = () => { const left = tickerLockedFor(form.symbol, launcher); if (left > 0) throw new ApiError(`The ticker ${form.symbol} was launched here in the last 24 hours. A ticker can be used once a day on pump.eco: pick another one, or try again in ${leftText(left)}.`, 409); };
+  const tickerFree = () => { const left = tickerLockedFor(form.symbol, launcher); if (left > 0) throw new ApiError(`The ticker ${form.symbol} was launched here in the last 7 days. A ticker can be used once a week on pump.eco: pick another one, or try again in ${leftText(left)}.`, 409); };
   let tx, hash, expectedTokens = 0n, extra = {};
   if (win) {
     const b = await window.build({ launcher, name: form.name, symbol: form.symbol, uri: meta.uri, window: { ...win, holderRewards: form.holderRewards }, mint, devBuyLamports: form.devBuyLamports });
@@ -338,7 +338,7 @@ export async function submit({ mint, transaction }) {
   const tx = sol.parseTx(transaction, 'The launch');
   checkLaunchTx(tx, row);
   // anti-vamp, last look before anything is sent: a coin with this ticker landed while this one was being signed
-  if (row.status === 'prepared') { const left = tickerLockedFor(row.symbol, row.launcher, { landedOnly: true }); if (left > 0) throw new ApiError(`The ticker ${row.symbol} was launched here while you were signing. A ticker can be used once a day on pump.eco: pick another one. Nothing was sent.`, 409); }
+  if (row.status === 'prepared') { const left = tickerLockedFor(row.symbol, row.launcher, { landedOnly: true }); if (left > 0) throw new ApiError(`The ticker ${row.symbol} was launched here while you were signing. A ticker can be used once a week on pump.eco: pick another one. Nothing was sent.`, 409); }
   if (inFlight.has(mint)) throw new ApiError('This launch is already being sent.', 409);
   inFlight.add(mint);
   try {
