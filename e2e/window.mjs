@@ -59,7 +59,8 @@ const db = openDb(`${DATA}/ledger.db`);
 console.log("\n-- configs (flat fee, test size + pump.fun sizes)");
 const { flatConfigs, pump: P } = await ensureConfigs({ conn, platform, hookProgram: HOOK, dataDir: DATA, log: () => {} });
 const sizes = Object.keys(flatConfigs).map(Number).sort((a, b) => a - b);
-ok(sizes[0] === 3 && sizes.length === 5, `configs made: ${sizes.join("/")} SOL (3 SOL is the test size)`);
+const { graduationSizes } = await import("../hk/lib/curve.mjs");
+ok(sizes[0] === 3 && sizes.join("/") === graduationSizes(P).join("/"), `configs made: ${sizes.join("/")} SOL (3 SOL is the test size; the rest is the size table)`);
 const SIZE = 3, config = new PublicKey(flatConfigs[SIZE]);
 const pumpSdk = new OnlinePumpSdk(conn);
 const lut = await ensureLut({ conn, payer: platform, file: `${DATA}/lut.json`, log: () => {},
