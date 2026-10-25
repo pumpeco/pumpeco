@@ -37,15 +37,14 @@ export default function Board({ cfg = {} }) {
   return (
     <main className="wrap">
       <section className="hero">
-        <img className="hero-mark" src="/icon-192.png" alt="" width="104" height="104" />
-        <h1 className="grad">pump.eco</h1>
-        <p className="lede">Launch a coin that nobody can buy before anyone else. It trades on its own curve, then becomes a real pump.fun coin in every holder's wallet.</p>
+        <img className="hero-mark" src="/icon-512.png" alt="" width="176" height="176" />
+        <h1 className="grad">Pump Eco</h1>
         <div className="row">
-          <Link href="/create" className="btn light big">[launch coin]</Link>
-          <Link href="/how" className="btn ghost big">[how it works]</Link>
+          <Link href="/create" className="btn light big">Launch</Link>
+          <Link href="/how" className="btn ghost big">How it works</Link>
         </div>
         {official && (
-          <div className="ca"><b>${official.symbol}</b><Link href={`/coin/${official.mint}`} className="ca-addr">{official.mint}</Link>
+          <div className="ca"><b>CA:</b><Link href={`/coin/${official.mint}`} className="ca-addr">{official.mint}</Link>
             <button className="copy" onClick={() => { navigator.clipboard?.writeText(official.mint).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}>{copied ? 'copied' : 'copy'}</button></div>
         )}
       </section>

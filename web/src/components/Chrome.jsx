@@ -19,8 +19,8 @@ export function Header() {
   const path = usePath();
   const nav = (cls) => (
     <nav className={`navpills ${cls}`}>
-      <Link href="/how" className={path === '/how' ? 'active' : ''}>[how it works]</Link>
-      <Link href="/create" className={path === '/create' ? 'active' : ''}>[launch coin]</Link>
+      <Link href="/how" className={path === '/how' ? 'active' : ''}>How it works</Link>
+      <Link href="/create" className={path === '/create' ? 'active' : ''}>Launch</Link>
     </nav>
   );
   return (
@@ -32,9 +32,9 @@ export function Header() {
           {SOCIAL_X && <a className="iconbtn" href={SOCIAL_X} target="_blank" rel="noreferrer" aria-label="X"><XIcon /></a>}
           <a className="iconbtn" href={GITHUB} target="_blank" rel="noreferrer" aria-label="GitHub"><GhIcon /></a>
           {w.address ? (
-            <span className="wallet-pill"><i className="dot" />{short(w.address)}<button className="x" onClick={w.disconnect}>[disconnect]</button></span>
+            <span className="wallet-pill"><i className="dot" />{short(w.address)}<button className="x" onClick={w.disconnect}>Disconnect</button></span>
           ) : (
-            <button className="wallet-pill connect" onClick={() => w.connect().catch(() => {})}>[connect wallet]</button>
+            <button className="wallet-pill connect" onClick={() => w.connect().catch(() => {})}>Connect wallet</button>
           )}
         </div>
       </div>
@@ -110,10 +110,8 @@ export function Footer() {
       <div className="wrap">
         <div>
           <Link href="/" className="logo"><img src="/icon-48.png" alt="" width="30" height="30" /><span>pump.eco</span></Link>
-          <p>Launch a coin that nobody can buy before anyone else. It trades on its own curve, then becomes a real pump.fun coin in every holder's wallet.</p>
-          <p className="xs" style={{ color: 'var(--dim)' }}>Not affiliated with pump.fun.</p>
         </div>
-        <div className="links"><h4>site</h4><Link href="/how">[how it works]</Link><Link href="/create">[launch coin]</Link></div>
+        <div className="links"><h4>site</h4><Link href="/how">How it works</Link><Link href="/create">Launch</Link></div>
         <div className="links"><h4>elsewhere</h4>
           {SOCIAL_X && <a href={SOCIAL_X} target="_blank" rel="noreferrer"><XIcon />pump_eco</a>}
           <a href={GITHUB} target="_blank" rel="noreferrer"><GhIcon />pumpeco</a>
