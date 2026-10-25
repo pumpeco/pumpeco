@@ -32,7 +32,7 @@ export default function Create({ cfg }) {
   const [pairFee, setPairFee] = useState(0);
   const windows = cfg.window?.ready ? cfg.window : null;
   const sizes = windows?.sizes?.filter((x) => x.available) || [];
-  const size = sizeSol ?? sizes[sizes.length - 1]?.sizeSol ?? null;
+  const size = sizeSol ?? sizes.find((x) => x.recommended)?.sizeSol ?? sizes[sizes.length - 1]?.sizeSol ?? null;
   const [step, setStep] = useState(null); // null | 'prepare' | 'sign' | 'send'
   const [error, setError] = useState(null);
   const fileRef = useRef(null);

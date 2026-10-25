@@ -16,6 +16,7 @@ import { ApiError } from './errors.mjs';
 import * as sol from './sol.mjs';
 import { dbcClient, getPool, getConfig, priorityFee } from '../hk/lib/chain.mjs';
 import { buildLaunchTx, buildSwapTx, launchSize } from '../hk/lib/launch.mjs';
+import { sizeAt, DEFAULT_SIZE_FRACTION } from '../hk/lib/curve.mjs';
 import { DEFAULT_RULES, validateRules, decodeRules, hookPdas, hookErrorFromLogs, HOOK_ERRORS } from '../hk/lib/rules.mjs';
 import { loadConfigState } from '../hk/lib/configs.mjs';
 import { loadLut } from '../hk/lib/lut.mjs';
@@ -85,7 +86,8 @@ export async function sizes() {
   let bal = 0n;
   try { bal = await platformBalance(); } catch {}
   const covered = (s) => (MODE === 'deadline' ? bal >= BigInt(Math.round(s * 1e9)) + CAPITAL_MARGIN : bal >= FEE_FLOAT);
-  return Object.keys(st.flatConfigs || {}).map(Number).sort((a, b) => a - b).map((s) => ({ sizeSol: s, capSol: st.pump ? st.pump.capAt(s) : null, startCapSol: st.pump ? st.pump.capAt(0) : null, available: covered(s) }));
+  const recommended = st.pump ? sizeAt(st.pump, DEFAULT_SIZE_FRACTION) : null; // what the create form selects by default
+  return Object.keys(st.flatConfigs || {}).map(Number).sort((a, b) => a - b).map((s) => ({ sizeSol: s, capSol: st.pump ? st.pump.capAt(s) : null, startCapSol: st.pump ? st.pump.capAt(0) : null, available: covered(s), recommended: s === recommended }));
 }
 export async function ready() { const s = await sizes(); return s.some((x) => x.available) && Boolean(await lutShared()); }
 

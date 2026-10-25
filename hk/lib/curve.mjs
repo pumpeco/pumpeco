@@ -42,9 +42,14 @@ export const pumpParamsKey = (p) => ({ virtualSol: p.virtualSol, virtualTokens: 
 
 /** Graduation sizes offered, as shares of pump.fun's own graduation; the last IS pump.fun's. */
 export const SIZE_FRACTIONS = [0.35, 0.5, 0.7, 1];
+/** The size the create form selects by default (the 0.35 share: 29.7 SOL, ≈ $11k cap at $100/SOL). */
+export const DEFAULT_SIZE_FRACTION = 0.35;
+/** Small fixed sizes offered besides the shares: 10 SOL raises to a 49.7 SOL cap (≈ $5k at $100/SOL; operator, 25 Oct 2026). */
+export const SMALL_SIZES = [10];
 /** Extra sizes for our own tests (TEST_SIZES=1,2): shown while set, kept recognised after. */
 export const testSizes = () => String(process.env.TEST_SIZES ?? "").split(",").map(Number).filter((n) => n > 0);
-export const graduationSizes = (p) => [...new Set([...testSizes(), ...SIZE_FRACTIONS.map((f) => Math.floor(p.completionSol * f * 10) / 10)])].sort((a, b) => a - b);
+export const sizeAt = (p, f) => Math.floor(p.completionSol * f * 10) / 10;
+export const graduationSizes = (p) => [...new Set([...testSizes(), ...SMALL_SIZES, ...SIZE_FRACTIONS.map((f) => sizeAt(p, f))])].sort((a, b) => a - b);
 
 /** Platform economics shared by every config. Changing these means new configs. */
 export const ECONOMICS = Object.freeze({
