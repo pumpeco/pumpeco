@@ -125,7 +125,7 @@ async function windowTrade({ wallet, mint, side, body, slippageBps, w }) {
   if (sim?.value?.err && !bundleOnly) {
     const why = window.hookReason(sim.value.logs) || JSON.stringify(sim.value.err).slice(0, 100);
     console.error(`[trade] window ${side} ${mint} refused: ${why}`);
-    throw new ApiError(`${why}. Nothing was sent.`, 400);
+    throw new ApiError(`${String(why).replace(/\.$/, '')}. Nothing was sent.`, 400);
   }
   const raw = Buffer.from(tx.serialize({ requireAllSignatures: false, verifySignatures: false }));
   const v = VersionedTransaction.deserialize(raw); // the browser signs a versioned envelope either way

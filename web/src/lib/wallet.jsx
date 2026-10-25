@@ -86,6 +86,17 @@ export function WalletProvider({ children }) {
     return btoa(String.fromCharCode(...out.signedTransaction));
   }, [connect]);
 
+  /** Signs SEVERAL base64 transactions in one wallet approval (the wallet standard takes a batch); returns them signed, base64, in order. */
+  const signTransactions = useCallback(async (b64s) => {
+    const { w, acct } = await connect();
+    const f = w.features['solana:signTransaction'];
+    if (!f) throw new Error('This wallet cannot sign transactions here. Try Phantom, Solflare or Backpack.');
+    const inputs = b64s.map((b64) => ({ account: acct, transaction: Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), chain: 'solana:mainnet' }));
+    let outs = await f.signTransaction(...inputs);
+    if (!Array.isArray(outs) || outs.length !== inputs.length) { outs = []; for (const i of inputs) outs.push((await f.signTransaction(i))[0]); } // a wallet that signs one at a time
+    return outs.map((o) => btoa(String.fromCharCode(...o.signedTransaction)));
+  }, [connect]);
+
   /** Signs a text message; returns the base58 signature. */
   const signMessage = useCallback(async (text) => {
     const { w, acct } = await connect();
@@ -108,7 +119,7 @@ export function WalletProvider({ children }) {
     pending.current = [];
   }, []);
 
-  const value = useMemo(() => ({ providers, address, busy, error, picker, connect, connectWith, disconnect, closePicker, setError, signTransaction, signMessage }),
-    [providers, address, busy, error, picker, connect, connectWith, disconnect, closePicker, signTransaction, signMessage]);
+  const value = useMemo(() => ({ providers, address, busy, error, picker, connect, connectWith, disconnect, closePicker, setError, signTransaction, signTransactions, signMessage }),
+    [providers, address, busy, error, picker, connect, connectWith, disconnect, closePicker, signTransaction, signTransactions, signMessage]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

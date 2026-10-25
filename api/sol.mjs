@@ -141,7 +141,7 @@ export function shared(read, ttl) {
 /** Per-key shared reads (one cache per mint), bounded. */
 export function sharedMap(read, ttl, max = 2000) {
   const m = new Map();
-  return (key, opts) => {
+  const fn = (key, opts) => {
     let g = m.get(key);
     if (!g) {
       if (m.size >= max) m.delete(m.keys().next().value);
@@ -150,6 +150,8 @@ export function sharedMap(read, ttl, max = 2000) {
     }
     return g(opts);
   };
+  fn.forget = (key) => m.delete(key);
+  return fn;
 }
 
 /* ───────────── prices ───────────── */

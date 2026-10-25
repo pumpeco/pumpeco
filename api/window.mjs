@@ -15,9 +15,10 @@ import { env, num, ROOT } from './env.mjs';
 import { ApiError } from './errors.mjs';
 import * as sol from './sol.mjs';
 import { dbcClient, getPool, getConfig, priorityFee } from '../hk/lib/chain.mjs';
-import { buildLaunchTx, buildSwapTx, launchSize } from '../hk/lib/launch.mjs';
+import { buildLaunchTx, buildSwapTx, launchSize, buildListTxs } from '../hk/lib/launch.mjs';
 import { sizeAt, DEFAULT_SIZE_FRACTION } from '../hk/lib/curve.mjs';
-import { DEFAULT_RULES, validateRules, decodeRules, hookPdas, hookErrorFromLogs, HOOK_ERRORS } from '../hk/lib/rules.mjs';
+import { DEFAULT_RULES, validateRules, decodeRules, decodeList, hookPdas, hookErrorFromLogs, HOOK_ERRORS, LIST_MAX, LIST_OPEN_SECS } from '../hk/lib/rules.mjs';
+import { creatorRules, publicRules } from './creator-rules.mjs';
 import { loadConfigState } from '../hk/lib/configs.mjs';
 import { loadLut } from '../hk/lib/lut.mjs';
 import { openDb, getLaunch as ledgerLaunch, registerLaunch } from '../hk/lib/db.mjs';
@@ -105,7 +106,9 @@ export function validateWindow(w) {
   }
   if (!(maxWalletPct >= 0 && maxWalletPct <= LIMITS.maxWalletPctMax)) throw new ApiError(`Max per wallet is 0 (off) to ${LIMITS.maxWalletPctMax}%`);
   if (!(sizeSol > 0)) throw new ApiError('Pick a curve size');
-  return { openSecs, windowMinutes, sizeSol, maxWalletBps: Math.round(maxWalletPct * 100) };
+  // the creator's hook rules (api/creator-rules.mjs): checked here, before anything is pinned or a key is taken
+  const rules = creatorRules(w?.rules, { maxWalletBps: Math.round(maxWalletPct * 100) });
+  return { openSecs, windowMinutes, sizeSol, maxWalletBps: rules.maxWalletBps ?? 0, rules };
 }
 
 /** The launch transaction: Meteora pool + hook rules in one, signed by the mint. The creator (payer) signs in the browser. */
@@ -119,7 +122,8 @@ export async function build({ launcher, name, symbol, uri, window: w, mint, devB
   const lut = await lutShared();
   if (!lut) throw new ApiError('Launching is being set up (lookup table). Try again in a few minutes.', 503);
   // holderRewards rides in the hook's rules (public, immutable): the graduation launches the pump.fun coin with it
-  const rules = { ...DEFAULT_RULES, dev: new PublicKey(launcher), platformOn: true, platform: PLATFORM, openSecs: w.openSecs, closeSecs: w.windowMinutes * 60, bundleMax: 1, maxWalletBps: w.maxWalletBps, holderRewards: Boolean(w.holderRewards) };
+  // the creator's rules first, the window's own fixed rules over them: nothing a creator sends can touch these
+  const rules = { ...DEFAULT_RULES, ...(w.rules ?? {}), dev: new PublicKey(launcher), platformOn: true, platform: PLATFORM, openSecs: w.openSecs, closeSecs: w.windowMinutes * 60, bundleMax: 1, maxWalletBps: w.maxWalletBps, holderRewards: Boolean(w.holderRewards) };
   const errs = validateRules(rules);
   if (errs.length) throw new ApiError(errs.join(' '));
   const config = new PublicKey(st.flatConfigs[w.sizeSol]);
@@ -138,6 +142,55 @@ export async function rulesOnChain(mint) {
   return a && a.owner.equals(HOOK_PROGRAM) ? decodeRules(a.data) : null;
 }
 export const onChain = async (mint) => Boolean(await rulesOnChain(mint));
+/** The creator-settable rules of a coin, numbers and words, read once: a config never changes after launch. */
+const rulesPublic = sol.sharedMap(async (mint) => { const r = publicRules(await rulesOnChain(mint)); if (!r) throw new Error('no rules yet'); return r; }, 3_600_000);
+/** A listed coin's allow/blocklist: how many wallets, sealed or not, and whether the creator can still add (the first day). */
+const listStatus = sol.sharedMap(async (mint) => {
+  const [a, r] = await Promise.all([sol.conn.getAccountInfo(hookPdas(HOOK_PROGRAM, mint).list, 'confirmed'), rulesOnChain(mint)]);
+  const cur = a ? decodeList(a.data) : null;
+  const t = await chainNow();
+  return { count: cur?.count ?? 0, sealed: cur?.sealed ?? false, open: !(cur?.sealed) && Boolean(r) && t < r.launchTs + LIST_OPEN_SECS, closesAt: r ? r.launchTs + LIST_OPEN_SECS : null };
+}, 20_000);
+export const forgetList = (mint) => listStatus.forget?.(mint);
+
+/**
+ * The transactions that put `wallets` on the coin's allow/blocklist (24 per transaction, the creator signs each) and seal
+ * it with the last when `seal`. Wallets already listed are skipped; a wallet that sorts below the last listed one can
+ * never be added (the program only appends) and is reported in `tooLate`.
+ */
+export async function listTxs({ mint, creator, wallets, seal }) {
+  const m = sol.requireMint(mint).toBase58();
+  if (!sol.isAddress(creator)) throw new ApiError('Connect a wallet first.', 401);
+  const r = await rulesOnChain(m);
+  if (!r) throw new ApiError('This coin is not on chain yet.', 404);
+  if (r.dev.toBase58() !== creator) throw new ApiError('Only the coin\'s creator can change its list.', 403);
+  if (!r.allowlist && !r.blocklist) throw new ApiError('This coin has no list.');
+  const raw = Array.isArray(wallets) ? wallets : [];
+  if (raw.length > LIST_MAX) throw new ApiError(`A list holds at most ${LIST_MAX} wallets.`);
+  const keys = [];
+  for (const w of raw) { if (!sol.isAddress(String(w).trim())) throw new ApiError(`Not a wallet address: ${String(w).slice(0, 60)}`); keys.push(new PublicKey(String(w).trim())); }
+  const a = await sol.conn.getAccountInfo(hookPdas(HOOK_PROGRAM, m).list, 'confirmed');
+  const cur = a ? decodeList(a.data) : null;
+  if (cur?.sealed) throw new ApiError('The list is sealed.');
+  if (keys.length && (await chainNow()) >= r.launchTs + LIST_OPEN_SECS) throw new ApiError('The list can only grow in the first day after launch.');
+  const { txs, added, tooLate } = buildListTxs({ hookProgram: HOOK_PROGRAM, dev: creator, mint: new PublicKey(m), wallets: keys, already: cur?.wallets ?? [], seal: Boolean(seal) });
+  const { blockhash } = await sol.conn.getLatestBlockhash('confirmed');
+  return { added, tooLate: tooLate.map((w) => w.toBase58()), transactions: txs.map((tx) => { tx.recentBlockhash = blockhash; return tx.serialize({ requireAllSignatures: false }).toString('base64'); }) };
+}
+/** Relays a signed list transaction: only a transaction made of this hook's list instructions, paid by the creator. */
+export async function submitList({ mint, transaction }) {
+  const m = sol.requireMint(mint).toBase58();
+  const tx = sol.parseTx(transaction, 'The list transaction');
+  const msg = tx.message, keys = msg.staticAccountKeys;
+  const ixs = msg.compiledInstructions.filter((ix) => !keys[ix.programIdIndex].equals(new PublicKey('ComputeBudget111111111111111111111111111111')));
+  if (!ixs.length || !ixs.every((ix) => keys[ix.programIdIndex].equals(HOOK_PROGRAM) && (Buffer.from(ix.data).subarray(0, 8).toString() === 'hkLstAdd' || Buffer.from(ix.data).subarray(0, 8).toString() === 'hkLstSel'))) throw new ApiError('Not a list transaction.', 400);
+  const r = await rulesOnChain(m);
+  if (!r || !keys[0].equals(r.dev)) throw new ApiError('Not signed by the coin\'s creator.', 403);
+  if (!tx.signatures[0] || tx.signatures[0].every((b) => b === 0)) throw new ApiError('Not signed by the wallet', 400);
+  const sig = await sol.sendSigned(tx, 'The list transaction');
+  forgetList(m);
+  return { sig };
+}
 
 /** Puts a landed launch in the graduator's ledger (idempotent), with its deadline read from the chain's launch time. */
 export async function register(row) {
@@ -170,8 +223,10 @@ export async function summary(mint, { fresh = false } = {}) {
     const pc = await pumpCapOf(`${l.pump_mint}:${['swapped', 'direct'].includes(l.pair_state) ? l.pair_mint : ''}`).catch(() => null);
     capSol = pc?.marketCapSol ?? null; priceSol = capSol != null ? capSol / 1e9 : null; venue = pc?.venue ?? 'pump.fun';
   }
+  const rules = await rulesPublic(l.mint).catch(() => null);
+  const list = rules?.allowlist || rules?.blocklist ? await listStatus(l.mint).catch(() => null) : null;
   return {
-    kind: 'window', status: l.status, phase, venue, pool: l.pool, opensAt, closesAt, chainNow: t, raisedSol, targetSol: threshold, progress: raisedSol != null && threshold ? Math.min(1, raisedSol / threshold) : (l.status === 'trading' ? 0 : 1),
+    kind: 'window', status: l.status, phase, venue, rules, list, pool: l.pool, opensAt, closesAt, chainNow: t, raisedSol, targetSol: threshold, progress: raisedSol != null && threshold ? Math.min(1, raisedSol / threshold) : (l.status === 'trading' ? 0 : 1),
     priceSol, capSol, fronted: l.fronted != null ? Number(l.fronted) / 1e9 : null, raise: l.front_before != null ? Number(l.front_before) / 1e9 : null,
     pumpMint: launched ? l.pump_mint : null, settled: l.settle_json ? JSON.parse(l.settle_json) : null, error: l.status === 'stalled' ? 'graduation needs attention' : null,
     feesTo: l.fee_to ?? null,

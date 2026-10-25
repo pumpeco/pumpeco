@@ -57,7 +57,7 @@ route('GET', '/api/config', async ({ query }) => ({
   launchReady: launch.configured(), launchOpen: launch.launchOpen() || launch.launchAllowed(query.get('wallet')), windowOnly: launch.WINDOW_ONLY, publicUrl: launch.PUBLIC_URL, official: coins.official(), devBuyReady: await launch.devBuyReady(), maxDevBuySol: launch.MAX_DEV_BUY_SOL, deployCostSol: Number(launch.DEPLOY_COST_LAMPORTS) / 1e9,
   vanity: { ready: !vanity.REQUIRED || vanity.available() > 0, available: vanity.available(), fresh: vanity.freshCount(), reserve: vanity.GRADUATION_RESERVE, required: vanity.REQUIRED, suffix: vanity.SUFFIX }, explorer: sol.EXPLORER, solUsd: await sol.solUsd().catch(() => null),
   limits: { name: launch.NAME_MAX, symbol: launch.SYMBOL_MAX, description: launch.DESCRIPTION_MAX, reply: coins.REPLY_MAX },
-  window: { firstBuyMaxSol: await window.firstBuyMaxLamports().then((l) => (l == null ? null : Number(l) / 1e9)).catch(() => null), firstBuyMaxPct: window.FIRST_BUY_MAX_SUPPLY_PCT, ready: await window.ready().catch(() => false), sizes: await window.sizes().catch(() => []), limits: window.LIMITS, platform: window.PLATFORM.toBase58(), hookProgram: window.HOOK_PROGRAM.toBase58(), deployCostSol: Number(launch.WINDOW_DEPLOY_COST_LAMPORTS) / 1e9 },
+  window: { firstBuyMaxSol: await window.firstBuyMaxLamports().then((l) => (l == null ? null : Number(l) / 1e9)).catch(() => null), firstBuyMaxPct: window.FIRST_BUY_MAX_SUPPLY_PCT, ready: await window.ready().catch(() => false), sizes: await window.sizes().catch(() => []), limits: window.LIMITS, platform: window.PLATFORM.toBase58(), hookProgram: window.HOOK_PROGRAM.toBase58(), deployCostSol: Number(launch.WINDOW_DEPLOY_COST_LAMPORTS) / 1e9, rules: true },
 }));
 route('GET', '/api/health', async () => ({ ok: true, rpc: sol.rpcUsage(), vanityFresh: vanity.freshCount(), launchReady: launch.configured() }));
 route('GET', '/api/coins', async ({ query }) => coins.list({ sort: query.get('sort') || 'bump', order: query.get('order') || 'desc', q: query.get('q') || '' }));
@@ -71,6 +71,8 @@ route('GET', '/api/coins/:mint/chart', async ({ params, ip, query }) => { limit(
 route('POST', '/api/coins/:mint/replies', async ({ params, body, ip }) => { limit(ip, 'reply', 30, 600_000); return coins.postReply({ ...body, mint: mintOf(params) }); });
 route('POST', '/api/launch/prepare', async ({ body, ip }) => { limit(ip, 'prepare', 10, 3_600_000); return launch.prepare(body, ip); });
 route('POST', '/api/launch/submit', async ({ body, ip }) => { limit(ip, 'submit', 20, 3_600_000); return launch.submit(body); });
+route('POST', '/api/launch/list', async ({ body, ip }) => { limit(ip, 'list', 60, 600_000); return window.listTxs({ mint: String(body.mint || ''), creator: String(body.wallet || ''), wallets: body.wallets, seal: body.seal }); });
+route('POST', '/api/launch/list/submit', async ({ body, ip }) => { limit(ip, 'listsubmit', 120, 600_000); return window.submitList({ mint: String(body.mint || ''), transaction: body.transaction }); });
 route('POST', '/api/trade/prepare', async ({ body, ip }) => { limit(ip, 'trade', 60, 600_000); return trade.prepare(body); });
 route('POST', '/api/trade/submit', async ({ body, ip }) => { limit(ip, 'tsubmit', 60, 600_000); return trade.submit(body); });
 

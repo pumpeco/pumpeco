@@ -153,3 +153,23 @@ img { display: block; }
 .pair-list { display: grid; gap: 4px; max-height: 340px; overflow-y: auto; }
 .pair-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 6px; background: var(--panel); text-align: left; }
 .pair-row:hover { background: #3a3c48; }
+
+/* hook rules on the create page (components/Rules.jsx) */
+.rules { display: grid; gap: 10px; }
+.rgroup { display: grid; gap: 6px; }
+.rule { display: grid; gap: 6px; padding: 6px 8px; border-radius: 6px; border: 1px solid transparent; }
+.rule.on { border-color: var(--line); background: var(--bg); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.check b { white-space: nowrap; }
+.check input { width: auto; margin: 0; }
+.rfields { display: grid; gap: 8px; }
+.rfields.two, .rfields .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rfields.three, .rfields .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.rfield { display: grid; gap: 4px; font-size: 12px; }
+.rfield > span { color: var(--blue); }
+.rfield > em { color: var(--muted); font-style: normal; font-size: 11px; }
+.rfield.wide { grid-column: 1 / -1; }
+.days { display: flex; gap: 4px; flex-wrap: wrap; }
+.days button { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 12px; }
+.days button.on { color: #000; background: var(--green); border-color: var(--green); }
+@media (max-width: 480px) { .rfields.three, .rfields .three, .rfields.two, .rfields .two { grid-template-columns: 1fr; } }

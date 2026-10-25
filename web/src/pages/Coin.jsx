@@ -5,6 +5,9 @@ import { useWallet, cancelled } from '../lib/wallet.jsx';
 import Chart from '../components/Chart.jsx';
 import { Modal, Spinner } from '../components/Chrome.jsx';
 import { usdK, ago, short, shortName, colorOf, lamportsToSol, tokens, pumpLink } from '../lib/format.js';
+import { RulesLines } from '../components/Rules.jsx';
+import { parseWallets } from '../lib/rulesText.js';
+import { fillList } from '../lib/lists.js';
 
 const fmtLeft = (secs) => { const s = Math.max(0, Math.floor(secs)); if (s >= 86400) return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`; if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; if (s >= 60) return `${Math.floor(s / 60)}m ${s % 60}s`; return `${s}s`; };
 function useNow(skew = 0) { const [t, setT] = useState(Date.now() / 1000 + skew); useEffect(() => { const id = setInterval(() => setT(Date.now() / 1000 + skew), 1000); return () => clearInterval(id); }, [skew]); return t; }
@@ -35,7 +38,44 @@ function WindowPanel({ c }) {
       {w.phase === 'graduated' && w.raise != null && <p className="muted xs" style={{ margin: 0 }}>the window raised {w.raise.toFixed(3)} SOL; the coin opened on pump.fun at that market cap.</p>}
       {w.phase === 'graduated' && w.raise == null && <p className="muted xs" style={{ margin: 0 }}>the curve filled; the coin opened on pump.fun at that market cap.</p>}
       {c.holderRewards && <div className="muted xs">creator rewards go to the holders (pump.fun holder rewards).</div>}
+      {w.rules?.any && w.phase !== 'graduated' && w.phase !== 'ended' && <div className="xs" style={{ display: 'grid', gap: 4 }}>
+        <div className="muted">rules on its curve, enforced by the hook on every trade and send until it migrates to pump.fun:</div>
+        <RulesLines lines={w.rules.lines} className="xs" />
+      </div>}
+      {w.list && w.phase !== 'graduated' && w.phase !== 'ended' && <div className="muted xs">{w.rules?.allowlist ? 'allowlist' : 'blocklist'}: {w.list.count} wallet{w.list.count === 1 ? '' : 's'}{w.list.sealed ? ', sealed' : w.list.open ? ', the creator can still add wallets for a day after launch' : ', closed'}.</div>}
       {w.pair && w.phase !== 'graduated' && <div className="muted xs">migrates into a Pumpfun coin paired with a custom pair{w.pair.creatorFeeBps ? `, ${w.pair.creatorFeeBps / 100}% creator fee` : ''}.</div>}
+    </div>
+  );
+}
+
+/** The creator's own list panel while the list is open: paste wallets, add them, seal it. */
+function ListPanel({ c, onDone }) {
+  const w = useWallet();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState(null);
+  if (!w.address || w.address !== c.creator) return null;
+  const parsed = parseWallets(text);
+  const go = async (seal) => {
+    setErr(null); setBusy('starting');
+    try {
+      const { tooLate } = await fillList({ mint: c.mint, wallet: w.address, wallets: parsed.wallets, seal, signTransactions: w.signTransactions, onProgress: setBusy });
+      setText(''); if (tooLate.length) setErr(`${tooLate.length} wallet${tooLate.length === 1 ? '' : 's'} could not be added: the list only grows upwards and they sort below its last wallet.`);
+      onDone?.();
+    } catch (e) { setErr(cancelled(e) ? 'cancelled in your wallet. nothing was sent.' : e.message); }
+    setBusy('');
+  };
+  return (
+    <div className="panel sm">
+      <div className="b">your {c.window.rules?.allowlist ? 'allowlist' : 'blocklist'}</div>
+      <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="wallet addresses, one per line" disabled={Boolean(busy)} />
+      {parsed.invalid.length > 0 && <div className="err">not wallet addresses: {parsed.invalid.slice(0, 3).join(', ')}</div>}
+      {err && <div className="err">{err}</div>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn small" disabled={Boolean(busy) || !parsed.wallets.length || parsed.invalid.length > 0} onClick={() => go(false)}>{busy ? <><Spinner /> {busy}</> : `add ${parsed.wallets.length || ''} wallets`}</button>
+        <button className="btn small ghost" disabled={Boolean(busy) || parsed.invalid.length > 0} onClick={() => go(true)}>{parsed.wallets.length ? 'add and seal' : 'seal the list'}</button>
+      </div>
+      <div className="muted xs">24 wallets per transaction, one approval per batch. sealing is for good.</div>
     </div>
   );
 }
@@ -92,6 +132,7 @@ export default function Coin({ mint, cfg }) {
         </section>
         <aside className="side">
           {c.kind === 'window' && c.window && <WindowPanel c={c} />}
+          {c.kind === 'window' && c.window?.list?.open && <ListPanel c={c} onDone={load} />}
           <TradePanel c={c} cfg={cfg} onTraded={load} />
           <div className="panel">
             <div className="info">

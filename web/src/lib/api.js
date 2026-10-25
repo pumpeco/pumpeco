@@ -20,6 +20,8 @@ export const api = {
   reply: (mint, data) => post(`/api/coins/${mint}/replies`, data),
   prepareLaunch: (form) => post('/api/launch/prepare', form),
   submitLaunch: (mint, transaction) => post('/api/launch/submit', { mint, transaction }),
+  listTxs: (data) => post('/api/launch/list', data),
+  submitList: (mint, transaction) => post('/api/launch/list/submit', { mint, transaction }),
   prepareTrade: (data) => post('/api/trade/prepare', data),
   submitTrade: (transaction) => post('/api/trade/submit', { transaction }),
 };

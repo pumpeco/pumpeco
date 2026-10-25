@@ -5,6 +5,9 @@ import { useWallet, cancelled } from '../lib/wallet.jsx';
 import { Modal, Spinner } from '../components/Chrome.jsx';
 import PairPicker from '../components/PairPicker.jsx';
 import { tokens } from '../lib/format.js';
+import RulesPicker, { RulesLines } from '../components/Rules.jsx';
+import { DEFAULT_FORM, toRules, describeRules, parseWallets } from '../lib/rulesText.js';
+import { fillList } from '../lib/lists.js';
 
 const readFile = (f) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
 
@@ -27,13 +30,19 @@ export default function Create({ cfg }) {
   const [windowMinutes, setWindowMinutes] = useState(60);
   const [sizeSol, setSizeSol] = useState(null);
   const [maxWalletPct, setMaxWalletPct] = useState(0);
+  const [rf, setRf] = useState(DEFAULT_FORM); // the hook rules picked (components/Rules.jsx)
+  const [live, setLive] = useState(null);    // the coin's mint once it is live but its list is unfinished
   const [rewards, setRewards] = useState('creator');
   const [pair, setPair] = useState(null); // null = SOL, else { mint, symbol, icon, ... }
   const [pairFee, setPairFee] = useState(0);
   const windows = cfg.window?.ready ? cfg.window : null;
   const sizes = windows?.sizes?.filter((x) => x.available) || [];
   const size = sizeSol ?? sizes.find((x) => x.recommended)?.sizeSol ?? sizes[sizes.length - 1]?.sizeSol ?? null;
-  const [step, setStep] = useState(null); // null | 'prepare' | 'sign' | 'send'
+  const [step, setStep] = useState(null); // null | 'prepare' | 'sign' | 'send' | 'list'
+  const [listStep, setListStep] = useState('');
+  const rules = windows?.rules ? toRules(rf, maxWalletPct) : null;
+  const ruleLines = rules ? describeRules(rules) : [];
+  const listed = rules && (rf.on.allowlist || rf.on.blocklist) ? parseWallets(rf.listText) : null;
   const [error, setError] = useState(null);
   const fileRef = useRef(null);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -55,11 +64,23 @@ export default function Create({ cfg }) {
     try {
       setStep('prepare');
       const p = await api.prepareLaunch({ wallet, ...form, symbol: form.symbol.trim().toUpperCase(), imageData, devBuySol: windows ? 0 : Number(devBuy) || 0,
-        holderRewards: rewards === 'holders', ...(windows ? { devBuySol: windows.limits?.firstBuy ? Number(devBuy) || 0 : 0, window: { openSecs, windowMinutes, sizeSol: size, maxWalletPct, holderRewards: rewards === 'holders', pair: pair?.mint || null, pumpCreatorFeeBps: pair ? pairFee : 0 } } : {}) });
+        holderRewards: rewards === 'holders', ...(windows ? { devBuySol: windows.limits?.firstBuy ? Number(devBuy) || 0 : 0, window: { openSecs, windowMinutes, sizeSol: size, maxWalletPct, holderRewards: rewards === 'holders', pair: pair?.mint || null, pumpCreatorFeeBps: pair ? pairFee : 0, ...(rules ? { rules } : {}) } } : {}) });
       setStep('sign');
       const signed = await w.signTransaction(p.transaction);
       setStep('send');
       const r = await api.submitLaunch(p.mint, signed);
+      // an allow/blocklist is filled right after the launch: the creator signs the list transactions in one approval
+      if (listed && (listed.wallets.length || rf.seal)) {
+        setStep('list'); setLive(r.mint);
+        try {
+          const { tooLate } = await fillList({ mint: r.mint, wallet, wallets: listed.wallets, seal: rf.seal, signTransactions: w.signTransactions, onProgress: setListStep });
+          if (tooLate.length) console.warn('not added to the list', tooLate);
+        } catch (e) {
+          setError(`your coin is live, but its list is not finished${cancelled(e) ? '' : `: ${e.message}`}. you can add the wallets from the coin page for a day.`);
+          setStep(null);
+          return;
+        }
+      }
       navigate(`/coin/${r.mint}`); // live, or still confirming: the coin page says which
     } catch (e) {
       setError(cancelled(e) ? 'The launch was cancelled in your wallet. Nothing was sent.' : e.message);
@@ -116,6 +137,9 @@ export default function Create({ cfg }) {
               <select value={maxWalletPct} onChange={(e) => setMaxWalletPct(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
                 {[[0, 'off'], [1, '1% of supply'], [2, '2% of supply'], [5, '5% of supply'], [10, '10% of supply']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
               </select></div>
+            {windows.rules && <div className="field"><label>rules (optional)</label>
+              <div className="muted xs">rules the coin keeps while it is on its curve, until it migrates to pump.fun. the hook on chain enforces them on every trade and send; written at launch, never changed.</div>
+              <RulesPicker form={rf} setForm={setRf} maxWalletPct={maxWalletPct} disabled={Boolean(step)} /></div>}
           </div>
         )}
         <p className="muted sm" style={{ margin: 0, textAlign: 'center' }}>tip: coin data cannot be changed after creation</p>
@@ -134,14 +158,17 @@ export default function Create({ cfg }) {
             <div><span className="muted">migrates to pump.fun at:</span> {(() => { const x = sizes.find((y) => y.sizeSol === size); return x?.capSol ? `${Math.round(x.capSol)} SOL market cap${cfg.solUsd ? ` (~$${Math.round(x.capSol * cfg.solUsd / 1000)}k)` : ''}` : `${size} SOL`; })()}</div>
             <div><span className="muted">pair:</span> {pair ? `${pair.symbol}${pairFee && pair.kind !== 'usdc' ? `, ${pairFee / 100}% Pumpfun creator fee` : ''}` : 'SOL'}</div>
             <div><span className="muted">creator rewards:</span> {rewards === 'holders' ? 'Holders' : 'Creator'}</div>
-            <div><span className="muted">max per wallet:</span> {maxWalletPct ? `${maxWalletPct}% of supply` : 'off'}</div>
+            <div><span className="muted">max per wallet:</span> {maxWalletPct && !rf.on.chapters ? `${maxWalletPct}% of supply` : 'off'}</div>
+            {ruleLines.length > 0 && <div><div className="muted">rules on its curve, until it migrates:</div><RulesLines lines={ruleLines} className="xs" /></div>}
+            {listed && <div><span className="muted">list:</span> {listed.wallets.length} wallet{listed.wallets.length === 1 ? '' : 's'}{rf.seal ? ', sealed right after launch' : ''}. you approve the list transactions in your wallet after the launch.</div>}
             {windows.limits?.firstBuy && Number(devBuy) > 0 && <div><span className="muted">your first buy:</span> {Number(devBuy)} SOL, inside the launch</div>}
           </div>
           <p className="muted xs">everything above is written on chain at launch and cannot be changed after.</p>
           {error && <div className="err">{error}</div>}
-          <button className="btn wide" disabled={Boolean(step) || !size} onClick={launch}>
-            {step === 'prepare' ? <><Spinner /> preparing</> : step === 'sign' ? <><Spinner /> approve in your wallet</> : step === 'send' ? <><Spinner /> launching</> : 'create coin'}
-          </button>
+          {live && !step ? <Link href={`/coin/${live}`} className="btn wide">go to your coin</Link> : <button className="btn wide" disabled={Boolean(step) || !size || Boolean(listed?.invalid.length)} onClick={launch}>
+            {step === 'prepare' ? <><Spinner /> preparing</> : step === 'sign' ? <><Spinner /> approve in your wallet</> : step === 'send' ? <><Spinner /> launching</> : step === 'list' ? <><Spinner /> {listStep || 'filling the list'}</> : 'create coin'}
+          </button>}
+          {listed?.invalid.length > 0 && <div className="err">the list holds something that is not a wallet address.</div>}
           <p className="muted xs">cost to deploy: ~{windows.deployCostSol} SOL{windows.limits?.firstBuy && Number(devBuy) > 0 ? ` + ${Number(devBuy)} SOL for your first buy` : ''}</p>
         </Modal>
       )}
