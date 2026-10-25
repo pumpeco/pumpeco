@@ -102,66 +102,88 @@ export default function Create({ cfg }) {
 
   return (
     <main className="wrap">
-      <div className="narrow">
-        <Link href="/" className="bracket">[go back]</Link>
-        <div className="field"><label>name</label><input value={form.name} onChange={set('name')} maxLength={32} /></div>
-        <div className="field"><label>ticker</label><input value={form.symbol} onChange={set('symbol')} maxLength={10} />
-          {tickerLocked && <div className="err">{tick.text}</div>}
-          {tick && !tick.locked && tick.symbol === symbol && <div className="muted xs">{symbol} is free.</div>}</div>
-        <div className="field"><label>description</label><textarea value={form.description} onChange={set('description')} maxLength={1000} /></div>
-        <div className="field">
-          <label>image</label>
-          <div className="drop" onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onFile(e.dataTransfer.files?.[0]); }}>
-            {imageData ? <img src={imageData} alt="" /> : <div>drag and drop an image</div>}
-            <span className="btn ghost small">{imageData ? 'change file' : 'select file'}</span>
-            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={(e) => onFile(e.target.files?.[0])} />
+      <Link href="/" className="bracket back">[go back]</Link>
+      <div className="create" style={{ marginTop: 18 }}>
+        <div className="form">
+          <div className="panel">
+            <div className="panel-title"><span className="n">1</span>[launch coin]</div>
+            <div className="field two">
+              <div className="field"><label>name</label><input value={form.name} onChange={set('name')} maxLength={32} /></div>
+              <div className="field"><label>ticker</label><input value={form.symbol} onChange={set('symbol')} maxLength={10} /></div>
+            </div>
+            {tickerLocked && <div className="err">{tick.text}</div>}
+            {tick && !tick.locked && tick.symbol === symbol && <div className="muted xs">{symbol} is free.</div>}
+            <div className="field"><label>description</label><textarea value={form.description} onChange={set('description')} maxLength={1000} /></div>
+            <div className="field">
+              <label>image</label>
+              <div className="drop" onClick={() => fileRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); onFile(e.dataTransfer.files?.[0]); }}>
+                {imageData ? <img src={imageData} alt="" /> : <div>drag and drop an image</div>}
+                <span className="btn ghost small">{imageData ? 'change file' : 'select file'}</span>
+                <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={(e) => onFile(e.target.files?.[0])} />
+              </div>
+            </div>
+            <div className="field two">
+              <div className="field"><label>x link</label><input value={form.twitter} onChange={set('twitter')} placeholder="(optional)" /></div>
+              <div className="field"><label>website</label><input value={form.website} onChange={set('website')} placeholder="(optional)" /></div>
+            </div>
           </div>
-        </div>
-        <div className="field"><label>x link</label><input value={form.twitter} onChange={set('twitter')} placeholder="(optional)" /></div>
-        <div className="field"><label>website</label><input value={form.website} onChange={set('website')} placeholder="(optional)" /></div>
-        {windows && (
-          <div className="panel" style={{ gap: 12 }}>
-            <div className="b" style={{ textAlign: 'center' }}>curve settings</div>
-            <div className="field"><label>buying opens</label>
-              <select value={openSecs} onChange={(e) => setOpenSecs(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
-                {[[5, '5 seconds after launch'], [10, '10 seconds after launch'], [30, '30 seconds after launch'], [60, '1 minute after launch']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-              </select></div>
-            {windows.limits?.mode === 'deadline' && <div className="field"><label>window ends</label>
-              <select value={windowMinutes} onChange={(e) => setWindowMinutes(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
-                {[[15, '15 minutes after launch'], [60, '1 hour after launch'], [360, '6 hours after launch'], [1440, '24 hours after launch'], [4320, '3 days after launch'], [10080, '7 days after launch']].filter(([v]) => v * 60 >= openSecs + 60).map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-              </select></div>}
-            <div className="field"><label>Migration</label>
-              <select value={size ?? ''} onChange={(e) => setSizeSol(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
-                {sizes.map((x) => <option key={x.sizeSol} value={x.sizeSol}>{cfg.solUsd && x.capSol ? `$${Math.round(x.capSol * cfg.solUsd / 1000)}k market cap` : `${Math.round(x.capSol ?? x.sizeSol)} SOL market cap`}</option>)}
-              </select>
-              <div className="muted xs">when the curve fills at this market cap the coin becomes a pump.fun coin and every holder receives it automatically.</div></div>
-            <div className="field"><label>Pair</label>
-              <PairPicker value={pair} onChange={(p) => { setPair(p); if (!p) setPairFee(0); }} disabled={Boolean(step)} /></div>
-            {pair && pair.kind !== 'usdc' && <div className="field"><label>Pumpfun creator fee</label>
-              <select value={pairFee} onChange={(e) => setPairFee(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
-                {[[0, 'Pumpfun default'], [50, '0.5%'], [100, '1%'], [200, '2%'], [300, '3%']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-              </select></div>}
-            <div className="field"><label>Creator rewards</label>
-              <select value={rewards} onChange={(e) => setRewards(e.target.value)} disabled={Boolean(step)} style={{ width: '100%' }}>
-                <option value="creator">Creator</option><option value="holders">Holders</option>
-              </select></div>
-            {windows.limits?.firstBuy && <div className="field"><label>your first buy (optional)</label>
-              <div className="amount"><input type="number" min="0" step="0.01" max={windows.firstBuyMaxSol ?? undefined} value={devBuy} onChange={(e) => setDevBuy(e.target.value)} placeholder={windows.firstBuyMaxSol ? `0.0 (up to ${windows.firstBuyMaxSol.toFixed(2)} SOL, ${windows.firstBuyMaxPct}% of supply)` : '0.0'} disabled={Boolean(step)} /><span className="unit">SOL</span></div></div>}
-            <div className="field"><label>max per wallet</label>
-              <select value={maxWalletPct} onChange={(e) => setMaxWalletPct(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
-                {[[0, 'off'], [1, '1% of supply'], [2, '2% of supply'], [5, '5% of supply'], [10, '10% of supply']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-              </select></div>
-            {windows.rules && <div className="field"><label>rules (optional)</label>
+          {windows && (
+            <div className="panel" style={{ gap: 14 }}>
+              <div className="panel-title"><span className="n">2</span>curve settings</div>
+              <div className="field"><label>buying opens</label>
+                <select value={openSecs} onChange={(e) => setOpenSecs(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
+                  {[[5, '5 seconds after launch'], [10, '10 seconds after launch'], [30, '30 seconds after launch'], [60, '1 minute after launch']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                </select></div>
+              {windows.limits?.mode === 'deadline' && <div className="field"><label>window ends</label>
+                <select value={windowMinutes} onChange={(e) => setWindowMinutes(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
+                  {[[15, '15 minutes after launch'], [60, '1 hour after launch'], [360, '6 hours after launch'], [1440, '24 hours after launch'], [4320, '3 days after launch'], [10080, '7 days after launch']].filter(([v]) => v * 60 >= openSecs + 60).map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                </select></div>}
+              <div className="field"><label>Migration</label>
+                <select value={size ?? ''} onChange={(e) => setSizeSol(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
+                  {sizes.map((x) => <option key={x.sizeSol} value={x.sizeSol}>{cfg.solUsd && x.capSol ? `$${Math.round(x.capSol * cfg.solUsd / 1000)}k market cap` : `${Math.round(x.capSol ?? x.sizeSol)} SOL market cap`}</option>)}
+                </select>
+                <div className="muted xs">when the curve fills at this market cap the coin becomes a pump.fun coin and every holder receives it automatically.</div></div>
+              <div className="field"><label>Pair</label>
+                <PairPicker value={pair} onChange={(p) => { setPair(p); if (!p) setPairFee(0); }} disabled={Boolean(step)} /></div>
+              {pair && pair.kind !== 'usdc' && <div className="field"><label>Pumpfun creator fee</label>
+                <select value={pairFee} onChange={(e) => setPairFee(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
+                  {[[0, 'Pumpfun default'], [50, '0.5%'], [100, '1%'], [200, '2%'], [300, '3%']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                </select></div>}
+              <div className="field"><label>Creator rewards</label>
+                <select value={rewards} onChange={(e) => setRewards(e.target.value)} disabled={Boolean(step)} style={{ width: '100%' }}>
+                  <option value="creator">Creator</option><option value="holders">Holders</option>
+                </select></div>
+              {windows.limits?.firstBuy && <div className="field"><label>your first buy (optional)</label>
+                <div className="amount"><input type="number" min="0" step="0.01" max={windows.firstBuyMaxSol ?? undefined} value={devBuy} onChange={(e) => setDevBuy(e.target.value)} placeholder={windows.firstBuyMaxSol ? `0.0 (up to ${windows.firstBuyMaxSol.toFixed(2)} SOL, ${windows.firstBuyMaxPct}% of supply)` : '0.0'} disabled={Boolean(step)} /><span className="unit">SOL</span></div></div>}
+              <div className="field"><label>max per wallet</label>
+                <select value={maxWalletPct} onChange={(e) => setMaxWalletPct(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
+                  {[[0, 'off'], [1, '1% of supply'], [2, '2% of supply'], [5, '5% of supply'], [10, '10% of supply']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                </select></div>
+            </div>
+          )}
+          {windows?.rules && (
+            <div className="panel" style={{ gap: 14 }}>
+              <div className="panel-title"><span className="n">3</span>rules (optional)</div>
               <div className="muted xs">rules the coin keeps while it is on its curve, until it migrates to pump.fun. the hook on chain enforces them on every trade and send; written at launch, never changed.</div>
-              <RulesPicker form={rf} setForm={setRf} maxWalletPct={maxWalletPct} disabled={Boolean(step)} /></div>}
+              <RulesPicker form={rf} setForm={setRf} maxWalletPct={maxWalletPct} disabled={Boolean(step)} />
+            </div>
+          )}
+        </div>
+        <aside className="aside">
+          <div className="panel preview">
+            <div className="who">
+              {imageData ? <img src={imageData} alt="" /> : <i className="blank" />}
+              <div style={{ minWidth: 0 }}><b>{form.name.trim() || 'name'}</b><span>[{symbol || 'ticker'}]</span></div>
+            </div>
+            {ruleLines.length > 0 && <div className="rl"><RulesLines lines={ruleLines} className="xs" /></div>}
+            <p className="muted sm" style={{ margin: 0, textAlign: 'center' }}>tip: coin data cannot be changed after creation</p>
+            {error && !modal && <div className="err">{error}</div>}
+            <button className="btn wide big" disabled={!ready || !cfg.launchReady || !open || (cfg.windowOnly && !windows)} onClick={() => { setError(null); setModal(true); }}>create coin</button>
+            {!cfg.launchReady && <div className="err">Launching is not set up on this server yet.</div>}
+            {cfg.launchReady && !open && <div className="ok" style={{ textAlign: 'center' }}>launching opens soon.</div>}
+            {cfg.launchReady && open && cfg.windowOnly && !windows && <div className="ok" style={{ textAlign: 'center' }}>launching opens soon.</div>}
           </div>
-        )}
-        <p className="muted sm" style={{ margin: 0, textAlign: 'center' }}>tip: coin data cannot be changed after creation</p>
-        {error && !modal && <div className="err">{error}</div>}
-        <button className="btn wide" disabled={!ready || !cfg.launchReady || !open || (cfg.windowOnly && !windows)} onClick={() => { setError(null); setModal(true); }}>create coin</button>
-        {!cfg.launchReady && <div className="err">Launching is not set up on this server yet.</div>}
-        {cfg.launchReady && !open && <div className="ok" style={{ textAlign: 'center' }}>launching opens soon.</div>}
-        {cfg.launchReady && open && cfg.windowOnly && !windows && <div className="ok" style={{ textAlign: 'center' }}>launching opens soon.</div>}
+        </aside>
       </div>
       {modal && windows && (
         <Modal onClose={() => { if (!step) setModal(false); }}>

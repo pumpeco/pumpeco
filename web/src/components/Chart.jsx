@@ -16,11 +16,11 @@ export default function Chart({ mint, solUsd, interval, setInterval: pickInterva
   useEffect(() => {
     const chart = createChart(box.current, {
       autoSize: true, height: 340,
-      layout: { background: { color: '#262834' }, textColor: '#9ca3af', fontFamily: 'Inter, sans-serif' },
-      grid: { vertLines: { color: '#2f3240' }, horzLines: { color: '#2f3240' } },
+      layout: { background: { color: 'transparent' }, textColor: '#a1a1aa', fontFamily: 'Geist, system-ui, sans-serif' },
+      grid: { vertLines: { color: 'rgba(255,255,255,.04)' }, horzLines: { color: 'rgba(255,255,255,.04)' } },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#3a3c48', scaleMargins: { top: 0.08, bottom: 0.22 } },
-      timeScale: { borderColor: '#3a3c48', timeVisible: true, secondsVisible: false, rightOffset: 4 },
+      rightPriceScale: { borderColor: '#2f2f35', scaleMargins: { top: 0.08, bottom: 0.22 } },
+      timeScale: { borderColor: '#2f2f35', timeVisible: true, secondsVisible: false, rightOffset: 4 },
       localization: { priceFormatter: fmtUsd },
     });
     candleRef.current = chart.addCandlestickSeries({ upColor: '#86efac', downColor: '#f87171', borderUpColor: '#86efac', borderDownColor: '#f87171', wickUpColor: '#86efac', wickDownColor: '#f87171', priceFormat: { type: 'custom', formatter: fmtUsd, minMove: 1e-12 } });
@@ -43,15 +43,14 @@ export default function Chart({ mint, solUsd, interval, setInterval: pickInterva
     if (fitted.current !== key && candles.length) { fitted.current = key; chartRef.current.timeScale().fitContent(); }
   }, [data, solUsd, mode, mint]);
 
-  const btn = (on) => ({ background: on ? '#3a3c48' : 'transparent', color: on ? '#fff' : '#9ca3af', padding: '3px 8px', borderRadius: 4, fontSize: 12 });
   return (
     <div className="chart">
-      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-        <div className="row" style={{ gap: 2 }}>{INTERVALS.map(([v, t]) => <button key={v} style={btn(interval === v)} onClick={() => pickInterval(v)}>{t}</button>)}</div>
-        <div className="row" style={{ gap: 2 }}>
-          <button style={btn(mode === 'mcap')} onClick={() => setMode('mcap')}>MCap</button>
-          <button style={btn(mode === 'price')} onClick={() => setMode('price')}>Price</button>
-          <button style={btn(log)} onClick={() => setLog(!log)}>log</button>
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+        <div className="seg">{INTERVALS.map(([v, t]) => <button key={v} className={interval === v ? 'on' : ''} onClick={() => pickInterval(v)}>{t}</button>)}</div>
+        <div className="seg">
+          <button className={mode === 'mcap' ? 'on' : ''} onClick={() => setMode('mcap')}>MCap</button>
+          <button className={mode === 'price' ? 'on' : ''} onClick={() => setMode('price')}>Price</button>
+          <button className={log ? 'on' : ''} onClick={() => setLog(!log)}>log</button>
         </div>
       </div>
       <div ref={box} style={{ height: 340, position: 'relative' }}>

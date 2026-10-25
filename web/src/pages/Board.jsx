@@ -5,7 +5,9 @@ import CoinCard from '../components/CoinCard.jsx';
 import { Crown } from '../components/Chrome.jsx';
 import { ago, usdK } from '../lib/format.js';
 
-export default function Board() {
+export default function Board({ cfg = {} }) {
+  const [copied, setCopied] = useState(false);
+  const official = cfg.official;
   const [data, setData] = useState(null);
   const [sort, setSort] = useState('created');
   const [order, setOrder] = useState('desc');
@@ -34,14 +36,27 @@ export default function Board() {
 
   return (
     <main className="wrap">
-      <div className="hero"><Link href="/create">[launch coin]</Link></div>
+      <section className="hero">
+        <img className="hero-mark" src="/icon-192.png" alt="" width="104" height="104" />
+        <h1 className="grad">pump.eco</h1>
+        <p className="lede">Launch a coin that nobody can buy before anyone else. It trades on its own curve, then becomes a real pump.fun coin in every holder's wallet.</p>
+        <div className="row">
+          <Link href="/create" className="btn light big">[launch coin]</Link>
+          <Link href="/how" className="btn ghost big">[how it works]</Link>
+        </div>
+        {official && (
+          <div className="ca"><b>${official.symbol}</b><Link href={`/coin/${official.mint}`} className="ca-addr">{official.mint}</Link>
+            <button className="copy" onClick={() => { navigator.clipboard?.writeText(official.mint).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}>{copied ? 'copied' : 'copy'}</button></div>
+        )}
+      </section>
       {data?.king && (
         <>
-          <div className="koth-title"><Crown />King of the hill<Crown /></div>
-          <div className="koth"><div><CoinCard c={data.king} flash={anim && flash.has(data.king.mint)} />
-            <div className="muted xs" style={{ textAlign: 'center', marginTop: 4 }}>{data.king.crowned ? `crowned ${ago(data.king.crownedAt)} at ${usdK(data.king.capUsd)} mcap` : `leading at ${usdK(data.king.capUsd)} mcap; the crown is taken at ${usdK(data.kothUsd)}`}</div></div></div>
+          <div className="section-title"><div className="koth-title"><Crown /><h2>King of the hill</h2><Crown /></div></div>
+          <div className="koth"><div><CoinCard c={data.king} className="row-card" flash={anim && flash.has(data.king.mint)} />
+            <div className="muted xs" style={{ textAlign: 'center' }}>{data.king.crowned ? `crowned ${ago(data.king.crownedAt)} at ${usdK(data.king.capUsd)} mcap` : `leading at ${usdK(data.king.capUsd)} mcap; the crown is taken at ${usdK(data.kothUsd)}`}</div></div></div>
         </>
       )}
+      <div style={{ height: 56 }} />
       <div className="filters">
         <form className="search" onSubmit={(e) => { e.preventDefault(); setQuery(q.trim()); }}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="search for token" />

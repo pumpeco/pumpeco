@@ -18,7 +18,7 @@ export default function How({ cfg }) {
   return (
     <main className="wrap">
       <div className="how">
-        <Link href="/" className="bracket">[go back]</Link>
+        <Link href="/" className="bracket back">[go back]</Link>
         <h1>How It Works</h1>
         <p className="lead">Every coin starts here with a fair launch.</p>
         <p>Every coin starts from the same point, trades on its own curve, and follows the rules chosen by its creator.</p>

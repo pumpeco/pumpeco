@@ -143,6 +143,6 @@ export function describeRules(r) {
   if (r.oscKind === 1) out.push({ t: 'breathing cap', d: `the most one buy can take swings around ${pct(r.oscBaseBps)} of supply by ${r.oscAmpPct}% on a ${duration(r.oscPeriod)} cycle, never below ${pct(r.oscFloorBps)}. sells are never capped.` });
   if (r.oscKind >= 2) out.push({ t: ['', '', 'momentum', 'resonance', 'coupled resonator'][r.oscKind], d: `the most one buy can take rests at ${pct(r.oscBaseBps)} of supply. every buy kicks an oscillator with a ${duration(r.oscPeriod)} period${r.oscKind === 4 ? ` coupled ${r.oscCouplingPct}% to a second one` : ''}, so the cap swings up and back${r.oscKind === 3 ? ', furthest when buys land on its beat' : ''}, and settles at ${r.oscDampPermille / 10}% per second, never below ${pct(r.oscFloorBps)}. sells are never capped.` });
   const exempt = r.maxWalletBps > 0 || r.earlySecs > 0 || r.allowlist || r.blocklist || r.tradeGuardBps > 0 || r.snipeSecs > 0 || r.hoursOn || r.maxBuyBps > 0 || r.plagueDose > 0 || r.chapterStartBps > 0 || r.oscKind > 0;
-  if (exempt) out.push({ t: 'creator\'s wallet', d: 'the creator\'s wallet is exempt from the rules about buying and holding (not from sell caps, the potato or ping pong). check what it holds.' });
+  if (exempt) out.push({ t: 'creator\'s wallet', d: 'the creator\'s wallet is exempt from the rules about buying and holding (not from sell caps). check what it holds.' });
   return out;
 }
