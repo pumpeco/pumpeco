@@ -10,6 +10,7 @@ const post = (path, data) => req(path, { method: 'POST', headers: { 'content-typ
 
 export const api = {
   config: () => req('/api/config'),
+  configFor: (wallet) => req(`/api/config?wallet=${encodeURIComponent(wallet)}`),
   coins: (sort, order, q) => req(`/api/coins?sort=${sort}&order=${order}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
   coin: (mint) => req(`/api/coins/${mint}`),
   chart: (mint, interval) => req(`/api/coins/${mint}/chart${interval ? `?interval=${interval}` : ''}`),

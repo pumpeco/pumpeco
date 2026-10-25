@@ -10,6 +10,15 @@ const readFile = (f) => new Promise((res, rej) => { const r = new FileReader(); 
 
 export default function Create({ cfg }) {
   const w = useWallet();
+  // the gate: open for everyone, or for this wallet alone (the operator's test launch while launching is closed)
+  const [allowed, setAllowed] = useState(false);
+  useEffect(() => {
+    if (cfg.launchOpen !== false || !w.address) { setAllowed(false); return; }
+    let alive = true;
+    api.configFor(w.address).then((c) => { if (alive) setAllowed(c.launchOpen === true); }).catch(() => {});
+    return () => { alive = false; };
+  }, [cfg.launchOpen, w.address]);
+  const open = cfg.launchOpen !== false || allowed;
   const [form, setForm] = useState({ name: '', symbol: '', description: '', twitter: '', telegram: '', website: '' });
   const [imageData, setImageData] = useState(null);
   const [modal, setModal] = useState(false);
@@ -111,10 +120,10 @@ export default function Create({ cfg }) {
         )}
         <p className="muted sm" style={{ margin: 0, textAlign: 'center' }}>tip: coin data cannot be changed after creation</p>
         {error && !modal && <div className="err">{error}</div>}
-        <button className="btn wide" disabled={!ready || !cfg.launchReady || cfg.launchOpen === false || (cfg.windowOnly && !windows)} onClick={() => { setError(null); setModal(true); }}>create coin</button>
+        <button className="btn wide" disabled={!ready || !cfg.launchReady || !open || (cfg.windowOnly && !windows)} onClick={() => { setError(null); setModal(true); }}>create coin</button>
         {!cfg.launchReady && <div className="err">Launching is not set up on this server yet.</div>}
-        {cfg.launchReady && cfg.launchOpen === false && <div className="ok" style={{ textAlign: 'center' }}>launching opens soon.</div>}
-        {cfg.launchReady && cfg.launchOpen !== false && cfg.windowOnly && !windows && <div className="ok" style={{ textAlign: 'center' }}>launching opens soon.</div>}
+        {cfg.launchReady && !open && <div className="ok" style={{ textAlign: 'center' }}>launching opens soon.</div>}
+        {cfg.launchReady && open && cfg.windowOnly && !windows && <div className="ok" style={{ textAlign: 'center' }}>launching opens soon.</div>}
       </div>
       {modal && windows && (
         <Modal onClose={() => { if (!step) setModal(false); }}>

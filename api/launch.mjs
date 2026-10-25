@@ -51,6 +51,9 @@ export const configured = () => Boolean(PUBLIC_URL) && (!PROD || /^https:\/\//.t
 export const WINDOW_ONLY = env('WINDOW_ONLY', '0') === '1';
 /** ⛔ Launching is CLOSED until the operator's own token is live (scripts/golive.mjs <CA> opens it; LAUNCH_OPEN=1 is for tests). */
 export const launchOpen = () => env('LAUNCH_OPEN', '') === '1' || Boolean(getKv('launchOpen', false));
+/** Wallets that may launch while the gate is closed (the operator's own test launch): kv launchAllow = [address, …]
+ *  (scripts/golive.mjs --allow <wallet>). Nothing else about a launch changes for them. */
+export const launchAllowed = (wallet) => Boolean(wallet) && (getKv('launchAllow', []) || []).includes(String(wallet));
 /** The launch lookup table (scripts/make-lut.mjs; kv launchLut or LOOKUP_TABLE). Without one a launch cannot carry a first buy. */
 const lutShared = sol.shared(async () => { const a = env('LOOKUP_TABLE', '') || getKv('launchLut', null); return a ? loadLookupTable(sol.conn, a) : null; }, 600_000);
 /** ⛔ "No table yet" is never cached: the moment scripts/make-lut.mjs records one, the next launch uses it. */
@@ -203,11 +206,11 @@ export function checkLaunchTx(tx, row) {
 const preparing = new Set();
 export async function prepare(body, ip = null) {
   if (!configured()) throw new ApiError('Launching is not set up on this server yet (PUBLIC_URL).', 503);
-  if (!launchOpen()) throw new ApiError('Launching opens soon. Check back in a little while.', 503);
+  const launcher = String(body.wallet || '');
+  if (!launchOpen() && !launchAllowed(launcher)) throw new ApiError('Launching opens soon. Check back in a little while.', 503);
   if (body.window && !(await window.ready())) throw new ApiError('Window launches are being set up on this server. Try again in a few minutes.', 503);
   // WINDOW_ONLY=1 (pump.eco): every coin launched here is a window launch; a plain pump.fun launch is never offered
   if (!body.window && WINDOW_ONLY) throw new ApiError('Launching opens soon. Check back in a little while.', 503);
-  const launcher = String(body.wallet || '');
   if (!sol.isAddress(launcher)) throw new ApiError('Connect a wallet first.', 401);
   if (preparing.has(launcher)) throw new ApiError('This wallet is already preparing a launch. Wait for it to finish.', 409);
   preparing.add(launcher);

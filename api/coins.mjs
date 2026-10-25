@@ -78,7 +78,9 @@ export async function list({ sort = 'bump', order = 'desc', q = '' } = {}) {
 }
 
 export async function coin(mint) {
-  const row = one("SELECT * FROM launches WHERE mint = ? AND status IN ('live', 'created')", mint);
+  // 'hidden' (scripts/hide-coin.mjs): off the board, the ticker and the king, but its page still answers a direct link so
+  // anyone who bought while it was listed can still sell here
+  const row = one("SELECT * FROM launches WHERE mint = ? AND status IN ('live', 'created', 'hidden')", mint);
   if (!row) throw new ApiError('No such coin here', 404);
   const solUsd = await sol.solUsd().catch(() => null);
   const v = await view(row, solUsd);
