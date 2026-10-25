@@ -35,7 +35,7 @@ const KEYS_PER_IP_HOUR = num('KEYS_PER_IP_HOUR', 3);
 const MAX_TX_BYTES = 1232;
 /** Rent for the mint, curve, metadata and token accounts pump.fun creates, plus fees: about 0.025 SOL on mainnet. */
 export const DEPLOY_COST_LAMPORTS = 25_000_000n;
-/** A window launch: Meteora pool + hook accounts, measured ~0.045 SOL on Hooker; held with room. */
+/** A window launch: Meteora pool + hook accounts, measured ~0.045 SOL on pump.eco; held with room. */
 export const WINDOW_DEPLOY_COST_LAMPORTS = 60_000_000n;
 
 /**

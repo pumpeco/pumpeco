@@ -1,6 +1,6 @@
 /**
  * Window launches: a Token-2022 coin with our transfer hook on a Meteora curve shaped like pump.fun's (the stack ported from
- * Hooker, hk/). The creator sets when buying opens (nobody, the creator included, can buy before: no block-zero devving) and
+ * pump.eco, hk/). The creator sets when buying opens (nobody, the creator included, can buy before: no block-zero devving) and
  * when the window closes. At the close the graduator (api/graduator.mjs) fills what is left of the curve, takes 99% of the
  * SOL back out through Meteora's migration fee, creates the pump.fun coin with the real raise and pushes every holder their
  * share: the coin lands on pump.fun at whatever market cap the window ended at. If buyers fill the curve earlier, it
@@ -40,7 +40,7 @@ export function platformKeypair() {
 export const PLATFORM = platformKeypair().publicKey;
 
 /**
- * WINDOW_MODE: 'fill' (default, Hooker's way) = the coin migrates to pump.fun when its curve FILLS at the cap the creator picked;
+ * WINDOW_MODE: 'fill' (default, pump.eco's way) = the coin migrates to pump.fun when its curve FILLS at the cap the creator picked;
  * buying never closes, nothing is fronted, the hot wallet only needs a fee float. 'deadline' = the creator also sets a time
  * window; at its end the platform fills the rest of the curve (capital on the hot wallet) and the coin migrates at whatever cap.
  */
@@ -92,7 +92,7 @@ export async function ready() { const s = await sizes(); return s.some((x) => x.
 /** Validates the creator's window settings. */
 export function validateWindow(w) {
   const openSecs = Math.round(Number(w?.openSecs ?? 60));
-  // fill mode: no deadline at all (closeSecs 0): the coin trades on its curve until it fills, like Hooker
+  // fill mode: no deadline at all (closeSecs 0): the coin trades on its curve until it fills, like pump.eco
   const windowMinutes = MODE === 'deadline' ? Math.round(Number(w?.windowMinutes ?? 60)) : 0;
   const sizeSol = Number(w?.sizeSol);
   const maxWalletPct = Number(w?.maxWalletPct ?? 0);

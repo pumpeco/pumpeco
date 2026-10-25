@@ -76,7 +76,7 @@ try {
   await api('/api/trade/prepare', { wallet: buyer.publicKey.toBase58(), mint: p.mint, side: 'buy', amount: 0.5 }).then(() => ok(false, 'buy before opening refused'), (e) => ok(/Buying opens in/.test(e.message), `buy before opening refused by the API (${e.message})`));
   await sleep(17_000);
   if (FILL) {
-    // Hooker's way: the curve fills (the buyer buys it out), nothing is fronted, the coin migrates at the cap the creator picked
+    // pump.eco's way: the curve fills (the buyer buys it out), nothing is fronted, the coin migrates at the cap the creator picked
     ok(c.window.closesAt == null && cfg.window.limits.mode === 'fill', 'fill mode: no deadline on the launch');
     const big = await api('/api/trade/prepare', { wallet: buyer.publicKey.toBase58(), mint: p.mint, side: 'buy', amount: size + 1, slippageBps: 500 });
     const bs = await api('/api/trade/submit', { transaction: sign(big.transaction, buyer) });
