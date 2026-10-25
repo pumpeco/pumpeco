@@ -32,7 +32,7 @@ export default function How({ cfg }) {
         <Step n="2" title="Choose When Trading Opens">
           <p>Set a launch delay between 5 seconds and 1 minute.</p>
           <p>Until the delay expires, buys are rejected directly on chain. This includes the creator's wallet.</p>
-          <p>The only exception is an optional first buy by the creator inside the launch transaction itself, capped at a fifth of the curve. It is visible on chain from the first block, and after it the creator waits for the opening like everyone else.</p>
+          <p>The only exception is an optional first buy by the creator inside the launch transaction itself, capped at 3% of the total supply. It is visible on chain from the first block, and after it the creator waits for the opening like everyone else.</p>
         </Step>
         <Step n="3" title="Choose the Migration Market Cap">
           <p>Choose when your coin should migrate:</p>

@@ -35,7 +35,7 @@ const KEYS_PER_IP_HOUR = num('KEYS_PER_IP_HOUR', 3);
 const MAX_TX_BYTES = 1232;
 /** Rent for the mint, curve, metadata and token accounts pump.fun creates, plus fees: about 0.025 SOL on mainnet. */
 export const DEPLOY_COST_LAMPORTS = 25_000_000n;
-/** A window launch: Meteora pool + hook accounts, measured ~0.045 SOL on pump.eco; held with room. */
+/** A window launch: Meteora pool + hook accounts, measured ~0.045 SOL on Hooker; held with room. */
 export const WINDOW_DEPLOY_COST_LAMPORTS = 60_000_000n;
 
 /**
@@ -222,7 +222,7 @@ async function prepareFor(launcher, body, ip) {
   const win = body.window ? window.validateWindow(body.window) : null;
   const pair = win ? await window.validatePair(body.window.pair, body.window.pumpCreatorFeeBps) : null;
   if (win && form.devBuyLamports > 0n && !window.FIRST_BUY) throw new ApiError('A first buy is not available yet.');
-  if (win && form.devBuyLamports > BigInt(Math.round(win.sizeSol * window.FIRST_BUY_MAX_SHARE * 1e9))) throw new ApiError(`The first buy is at most a fifth of the curve: ${(win.sizeSol * window.FIRST_BUY_MAX_SHARE).toFixed(1)} SOL for this size.`);
+  if (win && form.devBuyLamports > 0n) { const max = await window.firstBuyMaxLamports(); if (max == null || form.devBuyLamports > max) throw new ApiError(`The first buy can take at most ${window.FIRST_BUY_MAX_SUPPLY_PCT}% of the supply: ${max ? (Number(max) / 1e9).toFixed(3) : '?'} SOL at most.`); }
   const image = readImage(body);
   const balance = BigInt(await sol.conn.getBalance(new PublicKey(launcher)));
   const needed = form.devBuyLamports + (win ? WINDOW_DEPLOY_COST_LAMPORTS : DEPLOY_COST_LAMPORTS);

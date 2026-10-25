@@ -49,8 +49,8 @@ try {
   ok(cfg?.window?.ready, `window launches ready: sizes ${cfg?.window?.sizes?.map((s) => `${s.sizeSol}${s.available ? '' : '(x)'}`).join('/')}`);
   const size = cfg.window.sizes[0].sizeSol;
   await api('/api/launch/prepare', { wallet: creator.publicKey.toBase58(), name: 'Win', symbol: 'WIN', imageData: `data:image/png;base64,${PNG}`, window: { openSecs: 3, windowMinutes: 1, sizeSol: size } }).then(() => ok(false, 'open delay below the minimum refused'), (e) => ok(/open 5 seconds/.test(e.message), `open delay below the minimum refused (${e.message})`));
-  await api('/api/launch/prepare', { wallet: creator.publicKey.toBase58(), name: 'Window Coin', symbol: 'WIN', imageData: `data:image/png;base64,${PNG}`, devBuySol: size, window: { openSecs: 15, windowMinutes: 2, sizeSol: size } }).then(() => ok(false, 'a first buy over a fifth of the curve refused'), (e) => ok(/at most a fifth/.test(e.message), `a first buy over a fifth of the curve refused (${e.message})`));
-  const p = await api('/api/launch/prepare', { wallet: creator.publicKey.toBase58(), name: 'Window Coin', symbol: 'WIN', description: 'api e2e', imageData: `data:image/png;base64,${PNG}`, twitter: 'https://x.com/pumpdotfun', holderRewards: true, devBuySol: 0.25, window: { openSecs: 15, windowMinutes: 2, sizeSol: size, maxWalletPct: FILL ? 0 : 50, holderRewards: true } });
+  await api('/api/launch/prepare', { wallet: creator.publicKey.toBase58(), name: 'Window Coin', symbol: 'WIN', imageData: `data:image/png;base64,${PNG}`, devBuySol: size, window: { openSecs: 15, windowMinutes: 2, sizeSol: size } }).then(() => ok(false, 'a first buy over a fifth of the curve refused'), (e) => ok(/at most 3% of the supply/.test(e.message), `a first buy over 3% of the supply refused (${e.message})`));
+  const p = await api('/api/launch/prepare', { wallet: creator.publicKey.toBase58(), name: 'Window Coin', symbol: 'WIN', description: 'api e2e', imageData: `data:image/png;base64,${PNG}`, twitter: 'https://x.com/pumpdotfun', holderRewards: true, devBuySol: cfg.window.firstBuyMaxSol, window: { openSecs: 15, windowMinutes: 2, sizeSol: size, maxWalletPct: FILL ? 0 : 50, holderRewards: true } });
   ok(p.kind === 'window' && p.transaction, `prepared a window launch ${p.mint} (${pins} pins)`);
   ok(p.mint.endsWith(SUFFIX), `the window token's address comes from the pool (ends in ${SUFFIX})`);
   // a second window nobody will buy into: it must end cleanly, without the platform fronting anything
@@ -61,7 +61,7 @@ try {
   ok((await api('/api/config')).vanity.available === 0 && (await api('/api/config')).vanity.fresh === 1, 'config shows 1 fresh key, 0 available (held for the graduation)');
   const s = await api('/api/launch/submit', { mint: p.mint, transaction: sign(p.transaction, creator) });
   ok(s.status === 'live', `launch live (${s.sig?.slice(0, 12)})`);
-  { const held = await conn.getTokenAccountsByOwner(creator.publicKey, { mint: new PublicKey(p.mint) }); ok(held.value.length > 0, 'the creator holds their first buy right after the launch landed'); }
+  { const r = await conn.getTokenAccountsByOwner(creator.publicKey, { mint: new PublicKey(p.mint) }); const b = r.value.length ? BigInt((await conn.getTokenAccountBalance(r.value[0].pubkey)).value.amount) : 0n; const pct = Number(b) / 1e15 * 100; ok(b > 0n && pct <= 3 && pct > 2.9, `the creator's largest allowed first buy (${cfg.window.firstBuyMaxSol} SOL) landed in the launch: ${pct.toFixed(3)}% of supply (cap 3%)`); }
   { // the token's metadata is hosted by the site, shaped like pump.fun's own, and its image is a real image served by the site
     const { getTokenMetadata, TOKEN_2022_PROGRAM_ID } = await import('@solana/spl-token');
     const m = await getTokenMetadata(conn, new PublicKey(p.mint), 'confirmed', TOKEN_2022_PROGRAM_ID);
@@ -76,7 +76,7 @@ try {
   await api('/api/trade/prepare', { wallet: buyer.publicKey.toBase58(), mint: p.mint, side: 'buy', amount: 0.5 }).then(() => ok(false, 'buy before opening refused'), (e) => ok(/Buying opens in/.test(e.message), `buy before opening refused by the API (${e.message})`));
   await sleep(17_000);
   if (FILL) {
-    // pump.eco's way: the curve fills (the buyer buys it out), nothing is fronted, the coin migrates at the cap the creator picked
+    // Hooker's way: the curve fills (the buyer buys it out), nothing is fronted, the coin migrates at the cap the creator picked
     ok(c.window.closesAt == null && cfg.window.limits.mode === 'fill', 'fill mode: no deadline on the launch');
     const big = await api('/api/trade/prepare', { wallet: buyer.publicKey.toBase58(), mint: p.mint, side: 'buy', amount: size + 1, slippageBps: 500 });
     const bs = await api('/api/trade/submit', { transaction: sign(big.transaction, buyer) });

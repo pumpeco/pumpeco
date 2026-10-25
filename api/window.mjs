@@ -1,6 +1,6 @@
 /**
  * Window launches: a Token-2022 coin with our transfer hook on a Meteora curve shaped like pump.fun's (the stack ported from
- * pump.eco, hk/). The creator sets when buying opens (nobody, the creator included, can buy before: no block-zero devving) and
+ * Hooker, hk/). The creator sets when buying opens (nobody, the creator included, can buy before: no block-zero devving) and
  * when the window closes. At the close the graduator (api/graduator.mjs) fills what is left of the curve, takes 99% of the
  * SOL back out through Meteora's migration fee, creates the pump.fun coin with the real raise and pushes every holder their
  * share: the coin lands on pump.fun at whatever market cap the window ended at. If buyers fill the curve earlier, it
@@ -40,7 +40,7 @@ export function platformKeypair() {
 export const PLATFORM = platformKeypair().publicKey;
 
 /**
- * WINDOW_MODE: 'fill' (default, pump.eco's way) = the coin migrates to pump.fun when its curve FILLS at the cap the creator picked;
+ * WINDOW_MODE: 'fill' (default, Hooker's way) = the coin migrates to pump.fun when its curve FILLS at the cap the creator picked;
  * buying never closes, nothing is fronted, the hot wallet only needs a fee float. 'deadline' = the creator also sets a time
  * window; at its end the platform fills the rest of the curve (capital on the hot wallet) and the coin migrates at whatever cap.
  */
@@ -49,8 +49,19 @@ export const MODE = env('WINDOW_MODE', 'fill') === 'deadline' ? 'deadline' : 'fi
 const FEE_FLOAT = 300_000_000n;
 /** The creator's first buy inside the launch transaction: ON only once the hook that allows it is live on this chain. */
 export const FIRST_BUY = env('WINDOW_FIRST_BUY', '0') === '1';
-/** At most this share of the curve's size (pump.eco's rule): a fifth. */
-export const FIRST_BUY_MAX_SHARE = 0.2;
+/** The creator's first buy may take at most this share of the total supply (operator, 25 Oct 2026). */
+export const FIRST_BUY_MAX_SUPPLY_PCT = 3;
+/**
+ * The most SOL a first buy may spend so it receives at most FIRST_BUY_MAX_SUPPLY_PCT of the supply, on the curve as it opens
+ * (pump.fun's shape: tokens(q) = vt − k/(vs + q)), with Meteora's 1% first-swap fee on top. Null until the configs exist.
+ */
+export async function firstBuyMaxLamports() {
+  const st = await configs().catch(() => null);
+  const p = st?.pump; if (!p) return null;
+  const target = (p.supply * FIRST_BUY_MAX_SUPPLY_PCT) / 100;
+  const q = (p.virtualSol * p.virtualTokens) / (p.virtualTokens - target) - p.virtualSol;
+  return BigInt(Math.floor((q / 0.99) * 1e9 * 0.999)); // a hair under, so rounding never lets it exceed the share
+}
 export const LIMITS = Object.freeze({ mode: MODE, firstBuy: FIRST_BUY, openSecsMin: 5, openSecsMax: 86_400, windowMinMinutes: num('WINDOW_MIN_MINUTES', 5), windowMaxMinutes: 30 * 24 * 60, maxWalletPctMax: 50 });
 /** The hot wallet must hold the curve's whole size (what it may have to front) before a launch of that size is offered. */
 const CAPITAL_MARGIN = 100_000_000n;
@@ -81,7 +92,7 @@ export async function ready() { const s = await sizes(); return s.some((x) => x.
 /** Validates the creator's window settings. */
 export function validateWindow(w) {
   const openSecs = Math.round(Number(w?.openSecs ?? 60));
-  // fill mode: no deadline at all (closeSecs 0): the coin trades on its curve until it fills, like pump.eco
+  // fill mode: no deadline at all (closeSecs 0): the coin trades on its curve until it fills, like Hooker
   const windowMinutes = MODE === 'deadline' ? Math.round(Number(w?.windowMinutes ?? 60)) : 0;
   const sizeSol = Number(w?.sizeSol);
   const maxWalletPct = Number(w?.maxWalletPct ?? 0);
@@ -98,7 +109,7 @@ export function validateWindow(w) {
 /** The launch transaction: Meteora pool + hook rules in one, signed by the mint. The creator (payer) signs in the browser. */
 export async function build({ launcher, name, symbol, uri, window: w, mint, devBuyLamports = 0n }) {
   if (devBuyLamports > 0n && !FIRST_BUY) throw new ApiError('A first buy is not available yet.');
-  if (devBuyLamports > BigInt(Math.round(w.sizeSol * FIRST_BUY_MAX_SHARE * 1e9))) throw new ApiError(`The first buy is at most a fifth of the curve: ${(w.sizeSol * FIRST_BUY_MAX_SHARE).toFixed(1)} SOL for this size.`);
+  { const max = await firstBuyMaxLamports(); if (devBuyLamports > 0n && (max == null || devBuyLamports > max)) throw new ApiError(`The first buy can take at most ${FIRST_BUY_MAX_SUPPLY_PCT}% of the supply: ${max ? (Number(max) / 1e9).toFixed(3) : '?'} SOL at most.`); }
   const st = await configs();
   if (!st?.flatConfigs?.[w.sizeSol]) throw new ApiError('That curve size is not available right now', 503);
   const avail = (await sizes()).find((s) => s.sizeSol === w.sizeSol);

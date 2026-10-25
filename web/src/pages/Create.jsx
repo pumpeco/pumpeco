@@ -102,7 +102,7 @@ export default function Create({ cfg }) {
                 <option value="creator">Creator</option><option value="holders">Holders</option>
               </select></div>
             {windows.limits?.firstBuy && <div className="field"><label>your first buy (optional)</label>
-              <div className="amount"><input type="number" min="0" step="0.01" value={devBuy} onChange={(e) => setDevBuy(e.target.value)} placeholder="0.0" disabled={Boolean(step)} /><span className="unit">SOL</span></div></div>}
+              <div className="amount"><input type="number" min="0" step="0.01" max={windows.firstBuyMaxSol ?? undefined} value={devBuy} onChange={(e) => setDevBuy(e.target.value)} placeholder={windows.firstBuyMaxSol ? `0.0 (up to ${windows.firstBuyMaxSol.toFixed(2)} SOL, ${windows.firstBuyMaxPct}% of supply)` : '0.0'} disabled={Boolean(step)} /><span className="unit">SOL</span></div></div>}
             <div className="field"><label>max per wallet</label>
               <select value={maxWalletPct} onChange={(e) => setMaxWalletPct(Number(e.target.value))} disabled={Boolean(step)} style={{ width: '100%' }}>
                 {[[0, 'off'], [1, '1% of supply'], [2, '2% of supply'], [5, '5% of supply'], [10, '10% of supply']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
