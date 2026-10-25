@@ -14,11 +14,8 @@ const FIELDS = {
   allowlist: 'bool', blocklist: 'bool',
   hoursOn: 'bool', hoursDays: 127, hoursOpenMin: 1_439, hoursCloseMin: 1_439, tzOffsetMin: [-720, 840], hoursDst: 2, hoursSells: 'bool', hoursHolidays: 'bool',
   maxBuyBps: 10_000, maxSellBps: 10_000, sellSmallBps: 10_000, sellFloorBps: 10_000, sellBagBps: 10_000,
-  chapterStartBps: 10_000, chapterVolume: Number.MAX_SAFE_INTEGER, plagueDose: Number.MAX_SAFE_INTEGER,
+  chapterStartBps: 10_000, chapterVolume: Number.MAX_SAFE_INTEGER,
   dexOnly: 'bool',
-  potatoOn: 'bool', potatoMinBps: 100, potatoColdSecs: 86_400,
-  pingOn: 'bool', pingMinBps: 100, pingFreeSecs: 86_400,
-  oscKind: 4, oscPeriod: 3_600, oscBaseBps: 10_000, oscFloorBps: 10_000, oscAmpPct: 100, oscDampPermille: 400, oscCouplingPct: 60,
 };
 export const CREATOR_RULE_KEYS = Object.freeze(Object.keys(FIELDS));
 /** What a window launch always has, whatever the creator sends (api/window.mjs lays the real values over these). */

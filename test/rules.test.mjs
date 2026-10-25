@@ -11,7 +11,7 @@ const onChain = (creator) => decodeRules(encodeRules({ ...DEFAULT_RULES, ...crea
 
 test('creatorRules: nothing sent = nothing on; unknown fields ignored; the window max per wallet carried', () => {
   assert.deepEqual(creatorRules(undefined), {});
-  assert.deepEqual(creatorRules({ kingOn: true, fomoOnly: true, platformOn: false, bundleMax: 20, feeCapBps: 500 }), {}); // never creator-settable
+  assert.deepEqual(creatorRules({ kingOn: true, fomoOnly: true, platformOn: false, bundleMax: 20, feeCapBps: 500, plagueDose: 1e6 }), {}); // never creator-settable
   assert.deepEqual(creatorRules({}, { maxWalletBps: 200 }), { maxWalletBps: 200 });
   assert.equal(anyCreatorRule({}), false);
   assert.equal(anyCreatorRule({ maxWalletBps: 100 }), true);
@@ -20,8 +20,9 @@ test('creatorRules: ranges and clashes refused in the form\'s words', () => {
   assert.throws(() => creatorRules({ maxBuyBps: 5 }), /0\.1% and 100%/);
   assert.throws(() => creatorRules({ maxBuyBps: 100, tradeGuardBps: 100 }), /pick one/);
   assert.throws(() => creatorRules({ hoursDays: 62 }), /without the rule/);
-  assert.throws(() => creatorRules({ potatoMinBps: 'abc' }), /whole number/);
-  assert.throws(() => creatorRules({ oscKind: 9 }), /out of range/);
+  assert.throws(() => creatorRules({ maxBuyBps: 'abc' }), /whole number/);
+  assert.throws(() => creatorRules({ hoursDst: 7 }), /out of range/);
+  assert.deepEqual(creatorRules({ oscKind: 2, oscPeriod: 120, potatoOn: true, pingOn: true }), {}); // oscillators and games are not offered
   assert.throws(() => creatorRules({ rampSecs: 60, rampStartBps: 50 }), /Rising max per wallet needs a max per wallet/);
   assert.throws(() => creatorRules([1]), /object/);
 });
@@ -52,8 +53,8 @@ test('clashing picks switch each other off', () => {
   let f = withRule(DEFAULT_FORM, 'antiDump', true);
   f = withRule(f, 'tradeGuard', true);
   assert.ok(f.on.tradeGuard && !f.on.antiDump);
-  f = withRule(f, 'breath', true); f = withRule(f, 'coupled', true);
-  assert.ok(f.on.coupled && !f.on.breath && f.oscCoupling === 20);
+  f = withRule(f, 'hours', true); f = withRule(f, 'market', true);
+  assert.ok(f.on.market && !f.on.hours && f.tz === -300 && f.hoursDst === 1);
 });
 test('parseWallets: unique, reports junk', () => {
   const r = parseWallets(`${DEV.toBase58()}\n${DEV.toBase58()}, nope`);

@@ -4,18 +4,17 @@
 // words a creator reads before launching are the words everyone reads on the coin page after.
 //
 // Every rule here is already compiled into the hook on mainnet (hk/hook): the API only switches them on per launch.
-// Not offered on pump.eco: King of the Hill (a keeper pays SOL from the hot wallet), P2P-only (only the creator could
+// Not offered on pump.eco: plague, hot potato, ping pong and the four oscillator caps (operator, 25 Oct), King of the Hill (a keeper pays SOL from the hot wallet), P2P-only (only the creator could
 // fill the curve), FOMO-only / app-only (need a co-signer or clash with the platform wallet), the graduation
 // settlement rules (size fee, burn, holder share).
 import bs58 from 'bs58';
 
-export const GROUPS = ['who can hold', 'fair launch', 'when it trades', 'games', 'physics'];
+export const GROUPS = ['who can hold', 'fair launch', 'when it trades'];
 
 /** id → what the picker shows. `s` is the one-liner, `d` the explanation under it when picked. */
 export const CATALOG = [
   { id: 'allowlist', group: 'who can hold', t: 'allowlist', s: 'only wallets on your list can buy and hold it.', d: 'only the wallets you list can buy it or be sent it. you fill the list right after launch (one wallet approval per 24 wallets) and can seal it; for a day you can keep adding. sells always work.' },
   { id: 'blocklist', group: 'who can hold', t: 'blocklist', s: 'named wallets can never receive it.', d: 'the wallets you list can never buy it or be sent it while it is on its curve. known snipers and bundlers stay out. anyone else trades as normal.' },
-  { id: 'plague', group: 'who can hold', t: 'plague', s: 'nobody can buy until a holder infects them by sending some.', d: 'a wallet can only buy once it already holds the dose you pick. it starts with you: your first buy gives you tokens to send to the first wallets, and each of them can buy and infect others by sending tokens on. selling is never restricted.' },
   { id: 'window', group: 'fair launch', t: 'launch window cap', s: 'a tighter max per wallet for the first minutes, against snipers.', d: 'for the first minutes after launch a tighter cap applies, so nobody can load up while the price is lowest. when the window ends the normal cap takes over.' },
   { id: 'ramp', group: 'fair launch', t: 'rising max per wallet', s: 'max per wallet starts small and rises on a timer.', d: 'the max per wallet starts at a small share of supply and rises evenly to the full cap over the time you pick. needs a max per wallet above.' },
   { id: 'tradeGuard', group: 'fair launch', t: 'trade guard', s: 'no single buy can move more than a set share of supply.', d: 'any one buy or transfer can move at most the share of supply you pick. big buyers have to split up. sells are never limited.' },
@@ -25,13 +24,7 @@ export const CATALOG = [
   { id: 'chapters', group: 'fair launch', t: 'chapters', s: 'max per wallet starts small and doubles every chapter of volume.', d: 'a max per wallet that grows with the coin: it starts at the share you pick and doubles every time another chapter of volume trades. replaces the max per wallet above. sells always work.' },
   { id: 'hours', group: 'when it trades', t: 'trading hours', s: 'buys only on the days and hours you set, in any time zone.', d: 'it can only be bought on the days and between the times you pick. outside them holders can still sell, unless you close sells too.' },
   { id: 'market', group: 'when it trades', t: 'market hours', s: 'trades like a stock: weekdays 9:30 to 16:00 New York time.', d: 'monday to friday, 9:30 to 16:00 in New York, following daylight saving on chain, closed on US stock market holidays.' },
-  { id: 'dexOnly', group: 'when it trades', t: 'dex-only', s: 'no wallet-to-wallet sends: every move is a trade.', d: 'it only moves when it is bought from or sold to its curve. a plain wallet-to-wallet send is refused, yours included.' },
-  { id: 'potato', group: 'games', t: 'hot potato', s: 'whoever bought last cannot sell until someone else buys.', d: 'the last buyer holds the hot potato: they cannot sell or send until a different wallet buys after them. a buy has to reach your minimum to pass it on, and you can let it go cold after a while. nobody is exempt, you included.' },
-  { id: 'ping', group: 'games', t: 'ping pong', s: 'buys and sells take turns.', d: 'after a buy the next trade must be a sell, and after a sell a buy, for everyone. trades under your minimum go through on their own turn without handing it over, and if nobody takes the turn for a while either side can go.' },
-  { id: 'breath', group: 'physics', t: 'breathing cap', s: 'the buy cap breathes in and out on a fixed cycle.', d: 'the most one buy can take swings up and down on a fixed cycle: wide open at the peaks, tight at the troughs. sells and sends are never capped.' },
-  { id: 'momentum', group: 'physics', t: 'momentum', s: 'every buy kicks the buy cap up; it swings back when trading goes quiet.', d: 'a damped oscillator that starts at rest. every buy kicks it, so a run of buying opens room for bigger buys; then it swings back and settles. sells and sends are never capped.' },
-  { id: 'resonance', group: 'physics', t: 'resonance', s: 'buys on the beat swing the cap furthest.', d: 'momentum tuned for rhythm: buys that land in step with the beat pile energy on and swing the cap far wider than scattered buys. sells and sends are never capped.' },
-  { id: 'coupled', group: 'physics', t: 'coupled resonator', s: 'two coupled oscillators: the buy cap swells and fades in beats.', d: 'buys energise the first oscillator, which sets the cap, and the coupling pours that energy into the second and back, so the cap swells and fades in beats. sells and sends are never capped.' },
+  { id: 'dexOnly', group: 'when it trades', t: 'trade only', s: 'no wallet-to-wallet sends: every move is a trade.', d: 'it only moves when it is bought from or sold to its curve. a plain wallet-to-wallet send is refused, yours included.' },
 ];
 export const byId = Object.fromEntries(CATALOG.map((x) => [x.id, x]));
 
@@ -39,16 +32,7 @@ export const byId = Object.fromEntries(CATALOG.map((x) => [x.id, x]));
 export const CLASH = {
   antiDump: ['tradeGuard', 'sellScale'], tradeGuard: ['antiDump'], sellScale: ['antiDump'],
   chapters: ['ramp'], ramp: ['chapters'],
-  plague: ['dexOnly'], dexOnly: ['plague'],
-  breath: ['momentum', 'resonance', 'coupled'], momentum: ['breath', 'resonance', 'coupled'], resonance: ['breath', 'momentum', 'coupled'], coupled: ['breath', 'momentum', 'resonance'],
   market: ['hours'], hours: ['market'],
-};
-const OSC_ID = { breath: 1, momentum: 2, resonance: 3, coupled: 4 };
-export const OSC_DEFAULTS = {
-  1: { oscPeriod: 300, oscBase: 1, oscFloor: 0.1, oscAmp: 60, oscDamp: 0, oscCoupling: 0 },
-  2: { oscPeriod: 120, oscBase: 1, oscFloor: 0.25, oscAmp: 40, oscDamp: 8, oscCoupling: 0 },
-  3: { oscPeriod: 60, oscBase: 1, oscFloor: 0.25, oscAmp: 40, oscDamp: 1, oscCoupling: 0 },
-  4: { oscPeriod: 180, oscBase: 1, oscFloor: 0.25, oscAmp: 40, oscDamp: 1, oscCoupling: 20 },
 };
 /** The time zone the browser is in, as minutes east of UTC (standard time, so daylight saving can be added on chain). */
 export const myTz = () => { try { const d = new Date(); const jan = new Date(d.getFullYear(), 0, 1).getTimezoneOffset(), jul = new Date(d.getFullYear(), 6, 1).getTimezoneOffset(); return -Math.max(jan, jul); } catch { return 0; } };
@@ -65,20 +49,15 @@ export const DEFAULT_FORM = Object.freeze({
   dumpBuy: 1, dumpSell: 0.25,
   gsSmall: 1, gsFloor: 0.1, gsBag: 3,
   chStart: 1, chVolume: 10,
-  plagueDose: 1,
   hoursDays: 62, hoursOpen: '09:30', hoursClose: '16:00', tz: 0, hoursDst: 0, hoursSells: false,
-  potatoMin: 0.01, potatoCold: 0,
-  pingMin: 0.01, pingFree: 10,
-  ...OSC_DEFAULTS[2],
 });
 
-/** Switches a rule on or off, turning off what it clashes with, and loading an oscillator's defaults. */
+/** Switches a rule on or off, turning off what it clashes with (market hours load their preset). */
 export function withRule(form, id, want) {
   const on = { ...form.on };
   let n = { ...form, on };
   if (want) for (const o of CLASH[id] ?? []) delete on[o];
   if (want) on[id] = true; else delete on[id];
-  if (want && OSC_ID[id]) n = { ...n, ...OSC_DEFAULTS[OSC_ID[id]] };
   if (want && id === 'market') n = { ...n, hoursDays: 62, hoursOpen: '09:30', hoursClose: '16:00', tz: -300, hoursDst: 1 };
   return n;
 }
@@ -91,7 +70,7 @@ const toMin = (hhmm) => { const [h, m] = String(hhmm || '0:0').split(':').map(Nu
  * Keys match hk/lib/rules.mjs; only the rules a creator may set are present.
  */
 export function toRules(form, maxWalletPct = 0) {
-  const on = form.on, osc = Object.entries(OSC_ID).find(([id]) => on[id])?.[1] ?? 0;
+  const on = form.on;
   const hours = on.hours || on.market;
   const r = {
     maxWalletBps: maxWalletPct > 0 && !on.chapters ? bps(maxWalletPct) : 0,
@@ -109,12 +88,7 @@ export function toRules(form, maxWalletPct = 0) {
     maxBuyBps: on.antiDump ? bps(form.dumpBuy) : 0, maxSellBps: on.antiDump ? bps(form.dumpSell) : 0,
     sellSmallBps: on.sellScale ? bps(form.gsSmall) : 0, sellFloorBps: on.sellScale ? bps(form.gsFloor) : 0, sellBagBps: on.sellScale ? bps(form.gsBag) : 0,
     chapterStartBps: on.chapters ? bps(form.chStart) : 0, chapterVolume: on.chapters ? Math.round(Number(form.chVolume) * 1e12) : 0, // million tokens → base units (6 decimals)
-    plagueDose: on.plague ? Math.round(Number(form.plagueDose) * 1e6) : 0,
     dexOnly: !!on.dexOnly,
-    potatoOn: !!on.potato, potatoMinBps: on.potato ? bps(form.potatoMin) : 0, potatoColdSecs: on.potato ? Math.round(Number(form.potatoCold) * 60) : 0,
-    pingOn: !!on.ping, pingMinBps: on.ping ? bps(form.pingMin) : 0, pingFreeSecs: on.ping ? Math.round(Number(form.pingFree) * 60) : 0,
-    oscKind: osc, oscPeriod: osc ? Math.round(Number(form.oscPeriod)) : 0, oscBaseBps: osc ? bps(form.oscBase) : 0, oscFloorBps: osc ? bps(form.oscFloor) : 0,
-    oscAmpPct: osc ? Math.round(Number(form.oscAmp)) : 0, oscDampPermille: osc >= 2 ? Math.round(Number(form.oscDamp) * 10) : 0, oscCouplingPct: osc === 4 ? Math.round(Number(form.oscCoupling)) : 0,
   };
   return r;
 }
@@ -162,7 +136,7 @@ export function describeRules(r) {
   if (r.maxBuyBps > 0 || r.maxSellBps > 0) out.push({ t: 'anti-dump caps', d: [r.maxBuyBps > 0 && `one buy can take at most ${pct(r.maxBuyBps)} of supply.`, r.maxSellBps > 0 && `one sell can move at most ${pct(r.maxSellBps)}, the creator's included.`].filter(Boolean).join(' ') });
   if (r.sellBagBps > 0) out.push({ t: 'graduated sell caps', d: `small holders can sell up to ${pct(r.sellSmallBps)} of supply at once. the bigger the bag, the smaller one sell can be, down to ${pct(r.sellFloorBps)} for wallets holding ${pct(r.sellBagBps)} or more. the creator too.` });
   if (r.plagueDose > 0) out.push({ t: 'plague', d: `nobody can simply buy it: a wallet can only buy once it holds at least ${tokens(r.plagueDose)} tokens, and the first tokens have to be sent by a holder. selling is never restricted.` });
-  if (r.dexOnly) out.push({ t: 'dex-only', d: 'it only moves in trades with its curve. wallet-to-wallet sends are refused, the creator\'s included.' });
+  if (r.dexOnly) out.push({ t: 'trade only', d: 'it only moves in trades with its curve. wallet-to-wallet sends are refused, the creator\'s included.' });
   if (r.potatoOn) out.push({ t: 'hot potato', d: `whoever bought last cannot sell or send until a different wallet buys after them${r.potatoMinBps ? ` (with at least ${pct(r.potatoMinBps)} of supply)` : ''}${r.potatoColdSecs ? `, or nobody buys for ${duration(r.potatoColdSecs)}` : ''}. nobody is exempt, the creator included.` });
   if (r.pingOn) out.push({ t: 'ping pong', d: `buys and sells take turns, for everyone. trades under ${pct(r.pingMinBps)} of supply go through on their own turn without handing it over${r.pingFreeSecs ? `, and after ${duration(r.pingFreeSecs)} without a turn either side can go` : ''}. one transaction cannot take both turns.` });
   if (r.chapterStartBps > 0) out.push({ t: 'chapters', d: `no wallet can hold more than ${pct(r.chapterStartBps)} of supply at first. the cap doubles every time another ${tokens(r.chapterVolume)} tokens trade.` });

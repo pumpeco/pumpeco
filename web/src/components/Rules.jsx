@@ -28,7 +28,6 @@ function Fields({ id, form, set, maxWalletPct }) {
         </div>
       );
     }
-    case 'plague': return <div className="rfields"><Num label="infection dose (tokens)" k="plagueDose" form={form} set={set} min={0.000001} hint="a wallet must hold this many to buy. your first buy gives you the tokens to hand out." /></div>;
     case 'window': return <div className="rfields two"><Num label="for the first (minutes)" k="earlyMins" form={form} set={set} min={1} max={1440} step={1} /><Num label="cap in the window (% of supply)" k="earlyCap" form={form} set={set} min={0.1} max={100} /></div>;
     case 'ramp': return (
       <div className="rfields two">
@@ -57,25 +56,6 @@ function Fields({ id, form, set, maxWalletPct }) {
         <em className="muted xs">pick the zone's standard offset; daylight saving adds the hour on chain. closing before opening runs overnight.</em>
       </div>
     );
-    case 'potato': return <div className="rfields two"><Num label="smallest buy that passes it (% of supply)" k="potatoMin" form={form} set={set} min={0} max={1} hint="smaller buys go through but do not pass the potato." /><Num label="goes cold after (minutes)" k="potatoCold" form={form} set={set} min={0} max={1440} step={1} hint="0 = never." /></div>;
-    case 'ping': return <div className="rfields two"><Num label="smallest trade that takes the turn (% of supply)" k="pingMin" form={form} set={set} min={0} max={1} /><Num label="turn frees up after (minutes)" k="pingFree" form={form} set={set} min={0} max={1440} step={1} hint="0 = never." /></div>;
-    case 'breath': case 'momentum': case 'resonance': case 'coupled': {
-      const breath = id === 'breath';
-      return (
-        <div className="rfields">
-          <div className="three">
-            <Num label={breath ? 'cycle (seconds)' : id === 'resonance' ? 'the beat (seconds)' : 'natural period (seconds)'} k="oscPeriod" form={form} set={set} min={breath ? 30 : 20} max={breath ? 3600 : 1200} step={1} />
-            <Num label="base cap per buy (%)" k="oscBase" form={form} set={set} min={0.1} max={100} />
-            <Num label="never below (%)" k="oscFloor" form={form} set={set} min={0.01} max={100} />
-          </div>
-          <div className="three">
-            <Num label={breath ? 'swing (% of the base)' : 'buy energy (%)'} k="oscAmp" form={form} set={set} min={breath ? 10 : 5} max={100} step={1} />
-            {!breath && <Num label="damping (% per second)" k="oscDamp" form={form} set={set} min={1} max={40} step={0.5} />}
-            {id === 'coupled' && <Num label="coupling (%)" k="oscCoupling" form={form} set={set} min={1} max={60} step={1} />}
-          </div>
-        </div>
-      );
-    }
     default: return null;
   }
 }
