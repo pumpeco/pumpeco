@@ -75,6 +75,9 @@ export function partnerMigrationFee(cfg) {
   return fee - creator;
 }
 
+/** Lookup-table slots a pump-coin pair's multi-hop route needs at most (12 seen on mainnet-shaped tests; the margin is for a pool route). */
+const PAIR_ROUTE_KEYS = 16;
+
 export class Graduator {
   /**
    * `pairCheck(conn, pair, lamports)` and `pairSwap({ pair, lamports, user })` → { tx, signers } are the custom-pair
@@ -420,20 +423,8 @@ export class Graduator {
     // read, or a stranger's deposit cannot bend it. Its signature is in the ledger before it is sent (ledger-first).
     // ⭐ a PUMP COIN as the pair (pump.fun's multi-hop pairing): no swap at all. The create_v2 names the pair coin's curve
     // (or pool), and the buy goes SOL → pair coin → new coin in ONE multi_hop_swap inside the same transaction.
-    if (l.pair_mint && l.pair_state === "chosen" && !l.pair_sig) {
-      const { resolveQuote } = await import("../../ag/pump.mjs");
-      const q = await resolveQuote(this.conn, new PublicKey(l.pair_mint), { listed: (await this.pump.fetchQuoteControl())?.mints.map((e) => e.mint.toBase58()) ?? [] });
-      if (q.ok && q.kind !== "listed") {
-        L.update(this.db, l.mint, { pair_state: "direct", pair_program: q.tokenProgram });
-        this.log(`${l.mint.slice(0, 8)}… pair ${l.pair_mint.slice(0, 8)}… is a pump.fun coin (${q.kind}): bought straight with SOL`);
-        l = L.getLaunch(this.db, l.mint);
-      } else if (!q.ok && /waiting for its pool/.test(q.reason ?? "")) throw new Error(q.reason); // its migration is minutes away: retry
-      else if (!q.ok && l.pair_mint !== "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" && !/custom pair list/.test(q.reason ?? "")) {
-        L.update(this.db, l.mint, { pair_state: "fallback", pair_note: q.reason });
-        this.log(`⚠ ${l.mint.slice(0, 8)}… pair ${l.pair_mint.slice(0, 8)}… not used (${q.reason}): graduating against SOL`);
-        l = L.getLaunch(this.db, l.mint);
-      }
-    }
+    // ⛔ 25 Oct 2026 review: the pump-coin case used to be decided BEFORE pairCheck, skipping the liquidity, price-impact
+    // and creator-fee rules. Now one check (lib/pairs.mjs checkPairForGraduation) decides for every kind of pair.
     if (l.pair_mint && l.pair_state === "chosen") {
       if (l.pair_sig) {
         const fate = await fateOf(this.conn, l.pair_sig, l.pair_valid);
@@ -464,16 +455,29 @@ export class Graduator {
         } else {
           const upd = { pair_program: c.tokenProgram.toBase58() };
           if (c.creatorFeeBps != null && c.creatorFeeBps !== (l.pair_cfee ?? 0)) { upd.pair_cfee = c.creatorFeeBps; this.log(`⚠ ${l.mint.slice(0, 8)}… pump.fun allows a ${c.creatorFeeBps} bps creator fee now, not ${l.pair_cfee}: using ${c.creatorFeeBps}`); }
-          L.update(this.db, l.mint, upd);
-          const { tx, signers } = await this.pairSwap({ pair: l.pair_mint, lamports: BigInt(l.pump_spend), user: this.platform, quote: c.quote });
-          try {
-            await sendRemembered(this.conn, tx, signers, (sig, h) => L.update(this.db, l.mint, { pair_sig: sig, pair_valid: h }));
-          } catch (e) {
-            // only a refused simulation or a landed failure proves nothing was swapped; anything else: fateOf decides
-            if (e.preflight || e.landedFailed) L.update(this.db, l.mint, { pair_sig: null, pair_valid: null });
-            throw e;
+          if (c.kind === "pumpcoin") {
+            // the route's accounts join the hot wallet's lookup table (256 slots, shared with every launch): no room → SOL, not a stall
+            const slots = this.lut?.state.addresses.length ?? 0;
+            if (slots + PAIR_ROUTE_KEYS > 256) {
+              L.update(this.db, l.mint, { ...upd, pair_state: "fallback", pair_note: `lookup table full (${slots} of 256 slots used)` });
+              this.log(`⚠ ${l.mint.slice(0, 8)}… pair ${l.pair_mint.slice(0, 8)}… not used (lookup table full, ${slots}/256): graduating against SOL`);
+            } else {
+              L.update(this.db, l.mint, { ...upd, pair_state: "direct" });
+              this.log(`${l.mint.slice(0, 8)}… pair ${l.pair_mint.slice(0, 8)}… is a pump.fun coin: bought straight with SOL`);
+            }
+            l = L.getLaunch(this.db, l.mint);
+          } else {
+            L.update(this.db, l.mint, upd);
+            const { tx, signers } = await this.pairSwap({ pair: l.pair_mint, lamports: BigInt(l.pump_spend), user: this.platform, quote: c.quote });
+            try {
+              await sendRemembered(this.conn, tx, signers, (sig, h) => L.update(this.db, l.mint, { pair_sig: sig, pair_valid: h }));
+            } catch (e) {
+              // only a refused simulation or a landed failure proves nothing was swapped; anything else: fateOf decides
+              if (e.preflight || e.landedFailed) L.update(this.db, l.mint, { pair_sig: null, pair_valid: null });
+              throw e;
+            }
+            return; // the next pass reads what it delivered from the transaction itself
           }
-          return; // the next pass reads what it delivered from the transaction itself
         }
       }
     }

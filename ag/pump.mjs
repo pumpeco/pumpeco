@@ -154,7 +154,7 @@ export async function resolveQuote(connection, q, { listed = null } = {}) {
   } catch {
     return { ok: false, reason: 'Not a token address' };
   }
-  if (mint.equals(WSOL) || mint.equals(USDC)) return { ok: false, reason: 'SOL and USDC are not custom pairs. Pick a token.' };
+  if (mint.equals(WSOL) || mint.equals(USDC)) return { ok: false, reason: 'SOL is the default pair. Pick a token to pair with.' };
   const curveAddr = bondingCurveAddress(mint);
   const [mintInfo, curveInfo] = await connection.getMultipleAccountsInfo([mint, curveAddr]);
   if (!mintInfo || !(mintInfo.owner.equals(TOKEN_PROGRAM) || mintInfo.owner.equals(TOKEN_2022)) || mintInfo.data.length < 82) {

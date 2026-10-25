@@ -54,6 +54,7 @@ export async function ensureLut({ conn, payer, keys, file = null, log = () => {}
   }
   const have = new Set((table?.state.addresses ?? []).map((k) => k.toBase58()));
   const missing = keys.filter((k) => !have.has(k.toBase58()));
+  if (have.size + missing.length > 256) throw new Error(`lookup table full: ${have.size} slots used, ${missing.length} more needed, 256 is the limit`);
   for (let i = 0; i < missing.length; i += 20) {
     const ix = AddressLookupTableProgram.extendLookupTable({ lookupTable: address, authority: payer.publicKey, payer: payer.publicKey, addresses: missing.slice(i, i + 20) });
     if (i === 0 && txs.length) txs[0].push(ix); else txs.push([ix]);

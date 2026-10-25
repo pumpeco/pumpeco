@@ -123,7 +123,7 @@ export default function Create({ cfg }) {
             <div><span className="muted">buying opens:</span> {openSecs >= 3600 ? '1 hour' : openSecs >= 60 ? `${openSecs / 60} minute${openSecs > 60 ? 's' : ''}` : `${openSecs} seconds`} after launch</div>
             {windows.limits?.mode === 'deadline' && <div><span className="muted">window ends:</span> {windowMinutes >= 1440 ? `${windowMinutes / 1440} day(s)` : windowMinutes >= 60 ? `${windowMinutes / 60} hour(s)` : `${windowMinutes} minutes`} after launch</div>}
             <div><span className="muted">migrates to pump.fun at:</span> {(() => { const x = sizes.find((y) => y.sizeSol === size); return x?.capSol ? `${Math.round(x.capSol)} SOL market cap${cfg.solUsd ? ` (~$${Math.round(x.capSol * cfg.solUsd / 1000)}k)` : ''}` : `${size} SOL`; })()}</div>
-            <div><span className="muted">pair:</span> {pair ? `${pair.symbol}${pairFee ? `, ${pairFee / 100}% Pumpfun creator fee` : ''}` : 'SOL'}</div>
+            <div><span className="muted">pair:</span> {pair ? `${pair.symbol}${pairFee && pair.kind !== 'usdc' ? `, ${pairFee / 100}% Pumpfun creator fee` : ''}` : 'SOL'}</div>
             <div><span className="muted">creator rewards:</span> {rewards === 'holders' ? 'Holders' : 'Creator'}</div>
             <div><span className="muted">max per wallet:</span> {maxWalletPct ? `${maxWalletPct}% of supply` : 'off'}</div>
             {windows.limits?.firstBuy && Number(devBuy) > 0 && <div><span className="muted">your first buy:</span> {Number(devBuy)} SOL, inside the launch</div>}

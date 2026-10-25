@@ -96,13 +96,27 @@ export async function checkPairForGraduation(conn, pair, lamports, { fetchImpl =
   try {
     const sdk = new OnlinePumpSdk(conn);
     const qc = await sdk.fetchQuoteControl();
-    if (pair !== USDC_MINT && !qc?.mints.some((e) => e.mint.toBase58() === pair)) return { ok: false, why: "no longer on pump.fun's custom-pair list" };
+    let kind = "control";
+    if (pair === USDC_MINT) kind = "usdc";
+    else if (!qc?.mints.some((e) => e.mint.toBase58() === pair)) {
+      // ⛔ 25 Oct 2026 review: a PUMP.FUN COIN as the pair used to skip every check below, so a creator could point the whole
+      // raise into a thin coin they hold (fill its curve with the holders' SOL, sell into the pool). It must be a SOL-paired
+      // pump.fun coin with a live curve or PumpSwap pool AND as deep and as cheap to buy as any other pair.
+      const { resolveQuote } = await import("../../ag/pump.mjs");
+      const q = await resolveQuote(conn, new PublicKey(pair), { listed: [] });
+      if (!q.ok && /waiting for its pool/.test(q.reason ?? "")) return { ok: false, transient: true, why: q.reason };
+      if (!q.ok) return { ok: false, why: /custom pair list/.test(q.reason ?? "") ? "no longer on pump.fun's custom-pair list" : q.reason };
+      if (!isSolQuote(q.quoteOfQ)) return { ok: false, why: "the pair coin is itself paired with USDC" };
+      kind = "pumpcoin";
+    }
     const info = await conn.getAccountInfo(new PublicKey(pair), "confirmed");
     const problem = mintProblem(info);
     if (problem) return { ok: false, why: problem };
-    const meta = await (await fetchImpl(`${JUP}/tokens/v2/search?query=${pair}`, { signal: AbortSignal.timeout(10_000) })).json();
-    const t = meta.find?.((x) => x.id === pair);
-    if (!t || Number(t.liquidity) < minLiquidity) return { ok: false, why: `liquidity under $${minLiquidity.toLocaleString()}` };
+    // ⛔ a 429/5xx from Jupiter is not "no liquidity": it throws, and the catch below makes it a retry
+    const r = await fetchImpl(`${JUP}/tokens/v2/search?query=${pair}`, { signal: AbortSignal.timeout(10_000) });
+    if (!r.ok) throw new Error(`Jupiter ${r.status}`);
+    const t = (await r.json()).find?.((x) => x.id === pair);
+    if (!t || Number(t.liquidity) < minLiquidity) return { ok: false, why: `liquidity under $${minLiquidity.toLocaleString('en-US')}` };
     const quote = await jupiterQuote(pair, lamports, { fetchImpl });
     const impact = Number(quote.priceImpactPct) * 100;
     if (!(impact <= maxImpactPct)) return { ok: false, why: `the swap would cost ${impact.toFixed(2)}% in price impact` };
@@ -113,7 +127,7 @@ export async function checkPairForGraduation(conn, pair, lamports, { fetchImpl =
       const max = g.creatorFeeConfigurable ? Number(g.maxConfigurableCreatorFeeBps ?? 0) : 0;
       if (feeBps > max) feeBps = max;
     }
-    return { ok: true, quote, tokenProgram: info.owner, decimals: Number(t.decimals), creatorFeeBps: feeBps };
+    return { ok: true, kind, quote, tokenProgram: info.owner, decimals: Number(t.decimals), creatorFeeBps: feeBps };
   } catch (e) {
     // ⛔ a network blip (Jupiter, the RPC) says nothing about the pair: try again later, never fall back for it
     return { ok: false, transient: true, why: `check failed: ${String(e.message).slice(0, 100)}` };
@@ -123,9 +137,17 @@ export async function checkPairForGraduation(conn, pair, lamports, { fetchImpl =
 /**
  * One token as a pair candidate (a pasted CA): { ok, pair? , why? }. Pump.fun only accepts mints on its quote-control list.
  */
-export async function lookupPair(conn, mint, { fetchImpl = fetch, minLiquidity = PASTE_MIN_LIQUIDITY_USD } = {}) {
+export async function lookupPair(conn, mint, opts = {}) {
+  try {
+    return await lookupPairNow(conn, mint, opts);
+  } catch (e) {
+    // a network blip (Jupiter, the RPC) says nothing about the token: `transient` tells the caller not to cache or refuse for it
+    return { ok: false, transient: true, why: `the token could not be checked right now (${String(e.message).slice(0, 60)}). Try again in a moment` };
+  }
+}
+async function lookupPairNow(conn, mint, { fetchImpl = fetch, minLiquidity = PASTE_MIN_LIQUIDITY_USD } = {}) {
   let pk; try { pk = new PublicKey(mint); } catch { return { ok: false, why: 'not a token address' }; }
-  const meta = async () => { const r = await fetchImpl(`${JUP}/tokens/v2/search?query=${pk.toBase58()}`, { signal: AbortSignal.timeout(10_000) }); return (await r.json()).find?.((x) => x.id === pk.toBase58()) ?? null; };
+  const meta = async () => { const r = await fetchImpl(`${JUP}/tokens/v2/search?query=${pk.toBase58()}`, { signal: AbortSignal.timeout(10_000) }); if (!r.ok) throw new Error(`Jupiter ${r.status}`); return (await r.json()).find?.((x) => x.id === pk.toBase58()) ?? null; };
   const shape = (t, info, kind) => ({ kind, mint: pk.toBase58(), symbol: String(t?.symbol ?? '').slice(0, 16) || pk.toBase58().slice(0, 4), name: String(t?.name ?? '').slice(0, 48),
     icon: typeof t?.icon === 'string' && /^https:\/\//i.test(t.icon) ? t.icon.slice(0, 300) : null, decimals: Number(t?.decimals ?? info?.data?.[44]), tokenProgram: info.owner.toBase58(),
     usdPrice: Number(t?.usdPrice) > 0 ? Number(t.usdPrice) : null, liquidity: Math.round(Number(t?.liquidity) || 0) });
@@ -137,32 +159,31 @@ export async function lookupPair(conn, mint, { fetchImpl = fetch, minLiquidity =
     // a pump.fun coin as the pair (pump.fun's multi-hop pairing): bought straight with SOL through the pair's own curve or pool
     const { resolveQuote } = await import('../../ag/pump.mjs');
     const q = await resolveQuote(conn, pk, { listed: [] });
+    if (!q.ok && /waiting for its pool/.test(q.reason ?? "")) return { ok: false, transient: true, why: q.reason };
     if (!q.ok) return { ok: false, why: q.reason && !/custom pair list/.test(q.reason) ? q.reason : "Pumpfun does not accept this token as a pair (it is not on Pumpfun's custom-pair list and not a Pumpfun coin)" };
+    if (!isSolQuote(q.quoteOfQ)) return { ok: false, why: "this Pumpfun coin is itself paired with USDC. Pumpfun allows one level of pairing" };
     const info = await conn.getAccountInfo(pk, "confirmed");
-    let t = await meta().catch(() => null);
-    if (!t?.symbol) {
-      // a fresh pump.fun coin is often unknown to Jupiter: its name, ticker and image come from its own on-chain metadata
-      const { getTokenMetadata } = await import("@solana/spl-token");
-      const md = await getTokenMetadata(conn, pk, "confirmed", TOKEN_2022_PROGRAM_ID).catch(() => null);
-      let icon = null;
-      if (md?.uri) try { const j = await (await fetchImpl(md.uri, { signal: AbortSignal.timeout(6000), headers: { "user-agent": "Mozilla/5.0" } })).json(); icon = typeof j.image === "string" ? j.image : null; } catch {}
-      t = { ...(t ?? {}), symbol: md?.symbol, name: md?.name, icon };
-    }
+    // ⛔ the same depth rule as every other pair (checkPairForGraduation applies it again at migration): a coin still on its
+    // pump.fun curve, or unknown to Jupiter, is never deep enough
+    const t = await meta();
+    const liquidity = Math.round(Number(t?.liquidity) || 0);
+    if (liquidity < minLiquidity) return { ok: false, why: `too little liquidity ($${liquidity.toLocaleString('en-US')}; at least $${minLiquidity.toLocaleString('en-US')})`, pair: shape(t, info, 'pumpcoin') };
     return { ok: true, pair: shape(t, info, 'pumpcoin') };
   }
   const info = await conn.getAccountInfo(pk, "confirmed");
   const problem = mintProblem(info);
   if (problem) return { ok: false, why: problem };
-  const r = await fetchImpl(`${JUP}/tokens/v2/search?query=${pk.toBase58()}`, { signal: AbortSignal.timeout(10_000) });
-  const t = (await r.json()).find?.((x) => x.id === pk.toBase58());
+  const t = await meta();
   if (!t) return { ok: false, why: 'no market data for this token' };
   const pair = { mint: t.id, symbol: String(t.symbol ?? '').slice(0, 16), name: String(t.name ?? '').slice(0, 48), icon: typeof t.icon === 'string' && /^https:\/\//i.test(t.icon) ? t.icon.slice(0, 300) : null,
     decimals: Number(t.decimals), tokenProgram: info.owner.toBase58(), usdPrice: Number(t.usdPrice) > 0 ? Number(t.usdPrice) : null, liquidity: Math.round(Number(t.liquidity) || 0) };
-  if (pair.liquidity < minLiquidity) return { ok: false, why: `too little liquidity ($${pair.liquidity.toLocaleString()}; at least $${minLiquidity.toLocaleString()})`, pair };
+  if (pair.liquidity < minLiquidity) return { ok: false, why: `too little liquidity ($${pair.liquidity.toLocaleString('en-US')}; at least $${minLiquidity.toLocaleString('en-US')})`, pair };
   return { ok: true, pair: { ...pair, kind: 'control' } };
 }
 
 const WSOL = "So11111111111111111111111111111111111111112";
+/** A pump.fun coin's own quote as SOL: wrapped SOL on PumpSwap, the all-zero key on its curve (pump.fun's own encoding). */
+const isSolQuote = (k) => !k || k === WSOL || k === "11111111111111111111111111111111";
 export async function jupiterQuote(pair, lamports, { fetchImpl = fetch, slippageBps = SWAP_SLIPPAGE_BPS } = {}) {
   const r = await fetchImpl(`${JUP}/swap/v1/quote?inputMint=${WSOL}&outputMint=${pair}&amount=${lamports}&slippageBps=${slippageBps}&swapMode=ExactIn&restrictIntermediateTokens=true`, { signal: AbortSignal.timeout(10_000) });
   const j = await r.json().catch(() => ({}));

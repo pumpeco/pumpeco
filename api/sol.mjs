@@ -175,6 +175,14 @@ export async function solUsd() {
   return solCache.usd || null;
 }
 
+/** A token's dollar price from its deepest DexScreener pair (null when it has none), shared for a minute. */
+export const quoteUsdOf = sharedMap(async (mint) => {
+  const r = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${mint}`, { signal: AbortSignal.timeout(6000), headers: { accept: 'application/json' } });
+  if (!r.ok) throw new Error(`dexscreener ${r.status}`);
+  const pairs = (await r.json()).filter((p) => p.baseToken?.address === mint && p.priceUsd).sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
+  return pairs.length ? Number(pairs[0].priceUsd) : null;
+}, 60_000);
+
 export const lamports = async (addr) => BigInt(await conn.getBalance(new PublicKey(addr), 'confirmed'));
 
 /* ───────────── transactions ───────────── */

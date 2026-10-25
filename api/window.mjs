@@ -165,7 +165,7 @@ export async function summary(mint, { fresh = false } = {}) {
   let priceSol = null, capSol = null, venue = 'window';
   if (l.status === 'trading' && pool) { priceSol = Number(getPriceFromSqrtPrice(pool.sqrtPrice, 6, 9)); capSol = priceSol * 1e9; }
   else if (l.pump_mint && launched) {
-    const pc = await pumpCapOf(l.pump_mint).catch(() => null);
+    const pc = await pumpCapOf(`${l.pump_mint}:${['swapped', 'direct'].includes(l.pair_state) ? l.pair_mint : ''}`).catch(() => null);
     capSol = pc?.marketCapSol ?? null; priceSol = capSol != null ? capSol / 1e9 : null; venue = pc?.venue ?? 'pump.fun';
   }
   return {
@@ -178,12 +178,23 @@ export async function summary(mint, { fresh = false } = {}) {
     empty,
   };
 }
-const pumpCapOf = sol.sharedMap((m) => pumpMarketCap(sol.conn, m), 30_000);
+// "<pumpMint>:<pairMint or empty>": a coin paired with a custom pair holds the PAIR token in its curve/pool (its own decimals),
+// so its cap needs the pair's SOL price; read as SOL it was off by the pair's decimals (25 Oct 2026 review)
+const pumpCapOf = sol.sharedMap(async (key) => { const [m, pair] = key.split(':'); return pumpMarketCap(sol.conn, m, pair ? { quote: await pairQuote(pair) } : {}); }, 30_000);
+const pairQuote = sol.sharedMap(async (pair) => {
+  const [usd, solUsd, info] = await Promise.all([sol.quoteUsdOf(pair), sol.solUsd(), sol.conn.getAccountInfo(new PublicKey(pair), 'confirmed')]);
+  if (!(usd > 0) || !(solUsd > 0) || !info || info.data.length < 82) return null; // pumpMarketCap refuses a null quote: cap unknown, not wrong
+  return { mint: pair, solPerUnit: usd / solUsd, decimals: info.data[44] };
+}, 60_000);
 
 /** pump.fun's custom pairs a coin may migrate into (its quote-control list, deep liquidity only), shared for 10 minutes. */
 export const pairs = sol.shared(async () => [USDC_ENTRY, ...(await listPairs(sol.conn))], 600_000);
 /** A pasted CA, looked up once per 10 minutes per mint. */
-export const lookup = sol.sharedMap((mint) => lookupPair(sol.conn, mint), 600_000, 500);
+export const lookup = sol.sharedMap(async (mint) => {
+  const r = await lookupPair(sol.conn, mint);
+  if (r.transient) { const e = new Error(r.why); e.transient = true; throw e; } // a blip is answered but never cached for 10 minutes
+  return r;
+}, 600_000, 500);
 export { MAX_CREATOR_FEE_BPS };
 /** Validates a creator's pair choice: null (SOL) or { mint, symbol, creatorFeeBps }. */
 export async function validatePair(mint, creatorFeeBps) {

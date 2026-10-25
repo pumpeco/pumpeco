@@ -61,7 +61,7 @@ route('GET', '/api/config', async () => ({
 route('GET', '/api/health', async () => ({ ok: true, rpc: sol.rpcUsage(), vanityFresh: vanity.freshCount(), launchReady: launch.configured() }));
 route('GET', '/api/coins', async ({ query }) => coins.list({ sort: query.get('sort') || 'bump', order: query.get('order') || 'desc', q: query.get('q') || '' }));
 route('GET', '/api/ticker', async () => coins.ticker());
-route('GET', '/api/pairs/:mint', async ({ params, ip }) => { limit(ip, 'pairlookup', 60, 600_000); return window.lookup(String(params.mint)); });
+route('GET', '/api/pairs/:mint', async ({ params, ip }) => { limit(ip, 'pairlookup', 60, 600_000); try { return await window.lookup(String(params.mint)); } catch (e) { if (e.transient) return { ok: false, why: e.message }; throw e; } });
 route('GET', '/api/pairs', async () => ({ pairs: (await window.pairs().catch(() => [])).map((p) => ({ mint: p.mint, symbol: p.symbol, name: p.name, icon: p.icon, liquidity: p.liquidity, kind: p.kind ?? 'control' })), maxCreatorFeeBps: window.MAX_CREATOR_FEE_BPS }));
 route('GET', '/api/coins/:mint', async ({ params }) => coins.coin(mintOf(params)));
 route('GET', '/api/coins/:mint/replies', async ({ params }) => coins.replies(mintOf(params)));

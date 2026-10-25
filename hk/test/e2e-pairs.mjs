@@ -59,8 +59,9 @@ const flat2 = new PublicKey(st.flatConfigs["2"]);
 const RATE = { WBTC: 142_000n, SPYx: 15_700_000n, USDC: 100_000_000n };
 const programOf = async (mint) => (await conn.getAccountInfo(new PublicKey(mint))).owner;
 let failCheckFor = null; // a pair the next graduation's check refuses (the fallback case)
+let pumpCoinPair = null; // the pair the check reports as a pump.fun coin (bought straight, no swap)
 const g = new Graduator({ conn, db, platform, treasury: treasury.publicKey, hookProgram: HOOK, configs: configEntries(st), dataDir: DATA, log: (...a) => console.log("   ·", ...a),
-  pairCheck: async (_c, pair) => (pair === failCheckFor ? { ok: false, why: "test: liquidity gone" } : { ok: true, tokenProgram: await programOf(pair) }),
+  pairCheck: async (_c, pair) => (pair === failCheckFor ? { ok: false, why: "test: liquidity gone" } : { ok: true, kind: pair === pumpCoinPair ? "pumpcoin" : "control", tokenProgram: await programOf(pair) }),
   pairSwap: async ({ pair, lamports, user }) => {
     const sym = PAIR_TESTS.find((t) => t.mint === pair).symbol, prog = await programOf(pair), mint = new PublicKey(pair);
     const ata = getAssociatedTokenAddressSync(mint, user.publicKey, true, prog);
@@ -200,6 +201,7 @@ console.log(`\n${checks} checks passed`);
     ataIx(dev.publicKey, pumpLib.ata(dev.publicKey, qKp.publicKey), dev.publicKey, qKp.publicKey, TOKEN_2022_PROGRAM_ID),
     await pumpLib.buyExactSolInIx(conn, g0, { mint: qKp.publicKey, user: dev.publicKey, creator: dev.publicKey, lamports: 1_000_000_000n })), [dev, qKp]);
   const Q = qKp.publicKey.toBase58();
+  pumpCoinPair = Q;
   const before = await pumpLib.coinState(conn, Q);
   const { l, bc, pumpMint } = await graduate({ label: "Paired pump coin", pair: Q, cfee: 100, holderRewards: true });
   ok(l.pair_state === "direct", `pump coin pair: bought straight with SOL, no swap (state ${l.pair_state})`);

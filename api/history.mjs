@@ -36,7 +36,8 @@ async function venueOf(mint) {
   if (row?.kind === 'window') {
     const w = await (await import('./window.mjs')).summary(mint);
     if (!w) return null;
-    if (w.status === 'trading' || !w.pumpMint) return { venue: 'dbc', address: row.pool, owner: DBC_AUTHORITY, tradedMint: mint };
+    // the whole supply (1e9 × 6 decimals) is minted into the curve's vault at launch: the first buy shows as supply − what is left
+    if (w.status === 'trading' || !w.pumpMint) return { venue: 'dbc', address: row.pool, owner: DBC_AUTHORITY, tradedMint: mint, supplyUnits: 10n ** 15n };
     tradedMint = w.pumpMint;
   }
   const st = await coinState(sol.conn, tradedMint);
@@ -63,11 +64,11 @@ function tradeOf(tx, v) {
   if (v.venue === 'curve') {
     const i = keys.indexOf(v.address); if (i < 0) return null;
     dSol = BigInt(tx.meta.postBalances[i]) - BigInt(tx.meta.preBalances[i]);
-    // the launch transaction: the curve is created (its rent is in the SOL delta) and the whole supply minted into it, so the
-    // first buy shows as supply − what is left; a launch without a buy moves no SOL out of the buyer and is not a trade
-    const hadPre = (tx.meta.preTokenBalances ?? []).some((b) => b.owner === v.owner && b.mint === v.tradedMint);
-    if (!hadPre && v.supplyUnits != null) { dTok = post.tok - v.supplyUnits; dSol -= v.curveRent ?? 0n; if (dTok === 0n || dSol <= 0n) return null; }
   }
+  // the launch transaction: the curve (or vault) is created, the whole supply minted into it, so the first buy shows as
+  // supply − what is left; a pump.fun curve's rent is in its SOL delta. A launch without a buy is not a trade.
+  const hadPre = (tx.meta.preTokenBalances ?? []).some((b) => b.owner === v.owner && b.mint === v.tradedMint);
+  if (!hadPre && v.supplyUnits != null) { dTok = post.tok - v.supplyUnits; if (v.venue === 'curve') dSol -= v.curveRent ?? 0n; if (dTok === 0n || dSol <= 0n) return null; }
   if (dTok === 0n || dSol === 0n) return null;
   const side = dTok < 0n ? 'buy' : 'sell';
   if ((side === 'buy') !== (dSol > 0n)) return null; // tokens and SOL must move against each other (a deposit or a mint is not a trade)

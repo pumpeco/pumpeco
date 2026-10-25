@@ -55,7 +55,7 @@ export default function PairPicker({ value, onChange, disabled }) {
           {isCa && (
             <div>
               {checking && <div className="muted sm">checking the token…</div>}
-              {found?.ok && <button className="pair-row" onClick={() => pick(found.pair)}><Icon src={found.pair.icon} /><span><span className="b">{found.pair.symbol}</span> <span className="muted xs">{found.pair.name}</span></span><span className="muted xs" style={{ marginLeft: 'auto' }}>{found.pair.kind === 'pumpcoin' ? 'Pumpfun coin' : `${liq(found.pair.liquidity)} liquidity`}</span></button>}
+              {found?.ok && <button className="pair-row" onClick={() => pick(found.pair)}><Icon src={found.pair.icon} /><span><span className="b">{found.pair.symbol}</span> <span className="muted xs">{found.pair.name}</span></span><span className="muted xs" style={{ marginLeft: 'auto' }}>{found.pair.kind === 'usdc' ? 'stablecoin' : `${liq(found.pair.liquidity)} liquidity${found.pair.kind === 'pumpcoin' ? ', Pumpfun coin' : ''}`}</span></button>}
               {found && !found.ok && <div className="err">{found.why}</div>}
             </div>
           )}
@@ -71,7 +71,7 @@ export default function PairPicker({ value, onChange, disabled }) {
               {!shown.length && <div className="muted sm" style={{ textAlign: 'center' }}>no pair matches "{query}". paste its address to check it.</div>}
             </div>
           )}
-          <p className="muted xs" style={{ margin: 0 }}>your coin trades in SOL on its curve. at migration the Pumpfun coin is created paired with this token: the raise is swapped into it, or for a Pumpfun coin bought through its own curve. if the pair cannot be used at that moment, it migrates against SOL.</p>
+          <p className="muted xs" style={{ margin: 0 }}>your coin trades in SOL on its curve. at migration the Pumpfun coin is created paired with this token: the raise is swapped into it, or for a Pumpfun coin bought through its own pool. if the pair cannot be used at that moment, it migrates against SOL.</p>
         </Modal>
       )}
     </>

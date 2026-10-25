@@ -14,12 +14,7 @@ import * as window from './window.mjs';
 
 const stateOf = sol.sharedMap((mint) => coinState(sol.conn, mint), 20_000);
 /** A quote token's USD price (custom-pair coins), from DexScreener, shared for a minute; null when unknown. */
-const quoteUsdOf = sol.sharedMap(async (mint) => {
-  const r = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${mint}`, { signal: AbortSignal.timeout(6000), headers: { accept: 'application/json' } });
-  if (!r.ok) throw new Error(`dexscreener ${r.status}`);
-  const pairs = (await r.json()).filter((p) => p.baseToken?.address === mint && p.priceUsd).sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
-  return pairs.length ? Number(pairs[0].priceUsd) : null;
-}, 60_000);
+const quoteUsdOf = sol.quoteUsdOf;
 const holdersOf = sol.sharedMap((mint) => readHolders(mint), 30_000);
 export const forget = (mint) => { stateOf(mint, { fresh: false }).catch(() => {}); forgetKeys.add(mint); };
 const forgetKeys = new Set();
