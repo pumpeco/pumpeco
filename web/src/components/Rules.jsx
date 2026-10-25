@@ -60,23 +60,46 @@ function Fields({ id, form, set, maxWalletPct }) {
   }
 }
 
-/** The picker: every rule by group, a checkbox each, its fields when picked. */
-export default function RulesPicker({ form, setForm, maxWalletPct = 0, disabled = false }) {
-  const set = (k, v) => setForm({ ...form, [k]: v });
+/** One color per rule: its dot on the card, the card's glow when picked, its row in the preview. */
+export const RULE_COLOR = {
+  allowlist: '#4ade80', blocklist: '#fb923c', window: '#60a5fa', ramp: '#c084fc', tradeGuard: '#facc15', snipe: '#f472b6',
+  antiDump: '#fde047', sellScale: '#fbbf24', chapters: '#a3e635', hours: '#38bdf8', market: '#22d3ee', dexOnly: '#94a3b8',
+};
+
+/** The picker: every rule by group, as cards. A card toggles its rule; clashing rules switch each other off. */
+export default function RulesPicker({ form, setForm, disabled = false }) {
   return (
     <div className="rules">
       {GROUPS.map((g) => (
         <div key={g} className="rgroup">
-          <div className="muted xs">{g}</div>
-          {CATALOG.filter((x) => x.group === g).map((x) => (
-            <div key={x.id} className={`rule ${form.on[x.id] ? 'on' : ''}`}>
-              <label className="check"><input type="checkbox" checked={Boolean(form.on[x.id])} disabled={disabled} onChange={(e) => setForm(withRule(form, x.id, e.target.checked))} /> <b>{x.t}</b> <span className="muted">{x.s}</span></label>
-              {form.on[x.id] && <>
-                <p className="muted xs" style={{ margin: 0 }}>{x.d}</p>
-                <Fields id={x.id} form={form} set={set} maxWalletPct={maxWalletPct} />
-              </>}
-            </div>
-          ))}
+          <div className="rgroup-k">{g}</div>
+          <div className="rcards">
+            {CATALOG.filter((x) => x.group === g).map((x) => (
+              <button type="button" key={x.id} disabled={disabled} className={`rcard ${form.on[x.id] ? 'on' : ''}`} style={{ '--rc': RULE_COLOR[x.id] }}
+                aria-pressed={Boolean(form.on[x.id])} onClick={() => setForm(withRule(form, x.id, !form.on[x.id]))}>
+                <span className="rcard-top"><span className="rdot" style={{ background: RULE_COLOR[x.id], color: RULE_COLOR[x.id] }} /><b>{x.t}</b><span className="tick" /></span>
+                <span className="rcard-d">{x.s}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The settings of every picked rule, one under the other. Null when nothing is picked. */
+export function RuleSettings({ form, setForm, maxWalletPct = 0 }) {
+  const set = (k, v) => setForm({ ...form, [k]: v });
+  const picked = CATALOG.filter((x) => form.on[x.id]);
+  if (!picked.length) return null;
+  return (
+    <div className="settings">
+      {picked.map((x) => (
+        <div key={x.id} className="setting">
+          <div className="setting-head"><span className="rdot" style={{ background: RULE_COLOR[x.id], color: RULE_COLOR[x.id] }} /><b>{x.t}</b><span className="k">{x.group}</span></div>
+          <p className="muted xs" style={{ margin: 0 }}>{x.d}</p>
+          <Fields id={x.id} form={form} set={set} maxWalletPct={maxWalletPct} />
         </div>
       ))}
     </div>
