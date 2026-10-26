@@ -7,6 +7,8 @@ import { Modal, Spinner } from '../components/Chrome.jsx';
 import { usdK, ago, short, shortName, colorOf, lamportsToSol, tokens, pumpLink } from '../lib/format.js';
 import { RulesLines } from '../components/Rules.jsx';
 import { parseWallets } from '../lib/rulesText.js';
+
+const lockLen = (ms) => (ms >= 2 * 86_400_000 ? `${Math.round(ms / 86_400_000)} days` : `${Math.round(ms / 3_600_000)} hours`);
 import { fillList } from '../lib/lists.js';
 
 const fmtLeft = (secs) => { const s = Math.max(0, Math.floor(secs)); if (s >= 86400) return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`; if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; if (s >= 60) return `${Math.floor(s / 60)}m ${s % 60}s`; return `${s}s`; };
@@ -38,6 +40,7 @@ function WindowPanel({ c }) {
       {w.phase === 'graduated' && w.raise != null && <p className="muted xs" style={{ margin: 0 }}>the window raised {w.raise.toFixed(3)} SOL; the coin opened on pump.fun at that market cap.</p>}
       {w.phase === 'graduated' && w.raise == null && <p className="muted xs" style={{ margin: 0 }}>the curve filled; the coin opened on pump.fun at that market cap.</p>}
       {c.holderRewards && <div className="muted xs">creator rewards go to the holders (pump.fun holder rewards).</div>}
+      {c.tickerLock && c.origin !== 'external' && <div className="muted xs">ticker lock: {lockLen(c.tickerLock.ms)}{c.tickerLock.until > Date.now() ? `, nobody can launch ${c.symbol} here until ${new Date(c.tickerLock.until).toLocaleString()}` : `, ended`}.</div>}
       {w.rules?.any && w.phase !== 'graduated' && w.phase !== 'ended' && <div className="xs" style={{ display: 'grid', gap: 4 }}>
         <div className="muted">rules on its curve, enforced by the hook on every trade and send until it migrates to pump.fun:</div>
         <RulesLines lines={w.rules.lines} className="xs" />

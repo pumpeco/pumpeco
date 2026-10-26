@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import bs58 from 'bs58';
 import { env, num, PROD } from './env.mjs';
-import { one, run, now, getKv, DB_PATH } from './db.mjs';
+import { all, one, run, now, getKv, DB_PATH } from './db.mjs';
 import * as sol from './sol.mjs';
 import { ApiError } from './errors.mjs';
 import * as images from './images.mjs';
@@ -220,20 +220,40 @@ export async function prepare(body, ip = null) {
     preparing.delete(launcher);
   }
 }
-/** Anti-vamp: a ticker launched here is this wallet's alone for a day. How long is left, in ms, or 0 when the ticker is free. */
-export const TICKER_LOCK_MS = 7 * 86_400_000; // 7 days (operator, 25 Oct; was 24 hours)
-export function tickerLockedFor(symbol, launcher, { landedOnly = false } = {}) {
-  // a landed or confirming coin (hidden ones too) holds its ticker for a day; a prepared launch by ANOTHER wallet holds it
-  // for the 15 minutes it may still be signed, so an abandoned prepare cannot squat a ticker for a day.
+/**
+ * Anti-vamp: a ticker launched here cannot be launched here again, by ANY wallet (its own launcher included), for the lock
+ * its creator picked at launch: 24 hours, 3 days or 7 days (operator, 26 Oct; a fixed 7 days before, which rows launched
+ * before the choice keep: lock_ms NULL).
+ */
+export const TICKER_LOCKS = Object.freeze({ '24h': 86_400_000, '3d': 3 * 86_400_000, '7d': 7 * 86_400_000 });
+export const DEFAULT_TICKER_LOCK = '24h';
+export const LEGACY_TICKER_LOCK_MS = TICKER_LOCKS['7d'];
+export const TICKER_LOCK_MS = TICKER_LOCKS['7d']; // the longest lock: no row older than this can hold a ticker
+const PREPARE_HOLD_MS = 900_000;
+/** What holds this ticker now, or null when it is free: { left (ms), lockMs, preparing }. */
+export function tickerHold(symbol, launcher, { landedOnly = false } = {}) {
+  // a landed or confirming coin (hidden ones too) holds its ticker for its lock; a prepared launch by ANOTHER wallet holds it
+  // for the 15 minutes it may still be signed, so an abandoned prepare cannot squat a ticker.
   // `landedOnly` (at submit): prepared rows do not count, or two wallets prepared in the same minute would refuse EACH OTHER
   const t = now();
-  const r = one(`SELECT status, created_at FROM launches WHERE symbol = ? COLLATE NOCASE AND status <> 'failed'
-    AND ((status <> 'prepared' AND created_at > ?) OR (status = 'prepared' AND ? = 0 AND launcher <> ? AND created_at > ?))
-    ORDER BY created_at DESC LIMIT 1`, symbol, t - TICKER_LOCK_MS, landedOnly ? 1 : 0, launcher, t - 900_000);
-  if (!r) return 0;
-  return r.status === 'prepared' ? 900_000 - (t - r.created_at) : TICKER_LOCK_MS - (t - r.created_at);
+  const rows = all(`SELECT status, created_at, lock_ms FROM launches WHERE symbol = ? COLLATE NOCASE AND status <> 'failed'
+    AND ((status <> 'prepared' AND created_at > ?) OR (status = 'prepared' AND ? = 0 AND launcher <> ? AND created_at > ?))`,
+  symbol, t - TICKER_LOCK_MS, landedOnly ? 1 : 0, launcher, t - PREPARE_HOLD_MS);
+  let best = null;
+  for (const r of rows) {
+    const lockMs = r.status === 'prepared' ? PREPARE_HOLD_MS : r.lock_ms ?? LEGACY_TICKER_LOCK_MS;
+    const left = r.created_at + lockMs - t;
+    if (left > 0 && (!best || left > best.left)) best = { left, lockMs, preparing: r.status === 'prepared' };
+  }
+  return best;
 }
+/** How long is left on this ticker's lock, in ms, or 0 when it is free. */
+export const tickerLockedFor = (symbol, launcher, opts) => tickerHold(symbol, launcher, opts)?.left ?? 0;
 const leftText = (ms) => (ms > 2 * 86_400_000 ? `${Math.ceil(ms / 86_400_000)} days` : ms >= 3_600_000 ? `${Math.ceil(ms / 3_600_000)} hours` : `${Math.max(1, Math.ceil(ms / 60_000))} minutes`);
+export const lockText = (ms) => (ms >= 2 * 86_400_000 ? `${Math.round(ms / 86_400_000)} days` : `${Math.round(ms / 3_600_000)} hours`);
+const refusal = (symbol, h) => (h.preparing
+  ? `The ticker ${symbol} is being launched by another wallet right now. Pick another one, or try again in ${leftText(h.left)}.`
+  : `The ticker ${symbol} was launched here and is locked for ${lockText(h.lockMs)}. Pick another one, or try again in ${leftText(h.left)}.`);
 /**
  * For the create page, as the creator types: is this ticker free right now? Only landed launches count (a stranger's
  * prepare that may never be signed is not a reason to steer someone away), so the answer is a hint; prepare and submit
@@ -242,14 +262,18 @@ const leftText = (ms) => (ms > 2 * 86_400_000 ? `${Math.ceil(ms / 86_400_000)} d
 export function tickerStatus(symbol) {
   const s = String(symbol ?? '').trim().toUpperCase();
   if (!/^[A-Z0-9]{1,10}$/.test(s)) return { symbol: s, locked: false, left: 0, text: null };
-  const left = tickerLockedFor(s, '', { landedOnly: true });
-  if (left <= 0) return { symbol: s, locked: false, left: 0, text: null };
-  return { symbol: s, locked: true, left, text: `${s} was launched here in the last 7 days. a ticker can be used once a week on pump.eco: pick another one, or come back in ${leftText(left)}.` };
+  const h = tickerHold(s, '', { landedOnly: true });
+  if (!h) return { symbol: s, locked: false, left: 0, text: null };
+  return { symbol: s, locked: true, left: h.left, text: `${s} was launched here and is locked for ${lockText(h.lockMs)}: pick another one, or come back in ${leftText(h.left)}.` };
 }
 
 async function prepareFor(launcher, body, ip) {
   const form = validate(body);
-  { const left = tickerLockedFor(form.symbol, launcher); if (left > 0) throw new ApiError(`The ticker ${form.symbol} was launched here in the last 7 days. A ticker can be used once a week on pump.eco: pick another one, or try again in ${leftText(left)}.`, 409); }
+  const lockKey = body.tickerLock ?? DEFAULT_TICKER_LOCK;
+  if (!Object.hasOwn(TICKER_LOCKS, lockKey)) throw new ApiError('The ticker lock is 24 hours, 3 days or 7 days.');
+  const lockMs = TICKER_LOCKS[lockKey];
+  const tickerFree = () => { const h = tickerHold(form.symbol, launcher); if (h) throw new ApiError(refusal(form.symbol, h), 409); };
+  tickerFree();
   const win = body.window ? window.validateWindow(body.window) : null;
   const pair = win ? await window.validatePair(body.window.pair, body.window.pumpCreatorFeeBps) : null;
   if (win && form.devBuyLamports > 0n && !window.FIRST_BUY) throw new ApiError('A first buy is not available yet.');
@@ -277,7 +301,6 @@ async function prepareFor(launcher, body, ip) {
   // A row marked failed whose coin is on chain after all (a lost answer) is the live coin: never deleted or re-prepared.
   if (prior && (await onChain(m).catch(() => true))) { markLive(prior, prior.sig); throw new ApiError('This coin already exists on chain. It is live on the board.', 409); }
   if (prior) run('DELETE FROM launches WHERE mint = ?', m);
-  const tickerFree = () => { const left = tickerLockedFor(form.symbol, launcher); if (left > 0) throw new ApiError(`The ticker ${form.symbol} was launched here in the last 7 days. A ticker can be used once a week on pump.eco: pick another one, or try again in ${leftText(left)}.`, 409); };
   let tx, hash, expectedTokens = 0n, extra = {};
   if (win) {
     const b = await window.build({ launcher, name: form.name, symbol: form.symbol, uri: meta.uri, window: { ...win, holderRewards: form.holderRewards }, mint, devBuyLamports: form.devBuyLamports });
@@ -294,10 +317,10 @@ async function prepareFor(launcher, body, ip) {
   // ⛔ checked AGAIN with no await between the check and the insert (sqlite is synchronous): two wallets preparing the same
   //    ticker at once both passed the first check seconds ago; only the first to reach this line gets a row
   tickerFree();
-  run(`INSERT INTO launches (mint, launcher, name, symbol, description, image, metadata_uri, socials_json, dev_buy_lamports, tx_hash, mint_secret, status, created_at, bumped_at, updated_at, kind, pool, config, size_sol, open_secs, window_minutes, holder_rewards)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  run(`INSERT INTO launches (mint, launcher, name, symbol, description, image, metadata_uri, socials_json, dev_buy_lamports, tx_hash, mint_secret, status, created_at, bumped_at, updated_at, kind, pool, config, size_sol, open_secs, window_minutes, holder_rewards, lock_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   m, launcher, form.name, form.symbol, form.description, shownImage, meta.uri, JSON.stringify(form.socials), String(form.devBuyLamports), hash, JSON.stringify([...mint.secretKey]), now(), now(), now(),
-  win ? 'window' : 'pump', extra.pool ?? null, extra.config ?? null, win?.sizeSol ?? null, win?.openSecs ?? null, win?.windowMinutes ?? null, form.holderRewards ? 1 : 0);
+  win ? 'window' : 'pump', extra.pool ?? null, extra.config ?? null, win?.sizeSol ?? null, win?.openSecs ?? null, win?.windowMinutes ?? null, form.holderRewards ? 1 : 0, lockMs);
   return { mint: m, kind: win ? 'window' : 'pump', transaction: sol.b64(tx), expectedTokens: String(expectedTokens), costSol: Number(win ? WINDOW_DEPLOY_COST_LAMPORTS : DEPLOY_COST_LAMPORTS) / 1e9 };
 }
 
@@ -338,7 +361,7 @@ export async function submit({ mint, transaction }) {
   const tx = sol.parseTx(transaction, 'The launch');
   checkLaunchTx(tx, row);
   // anti-vamp, last look before anything is sent: a coin with this ticker landed while this one was being signed
-  if (row.status === 'prepared') { const left = tickerLockedFor(row.symbol, row.launcher, { landedOnly: true }); if (left > 0) throw new ApiError(`The ticker ${row.symbol} was launched here while you were signing. A ticker can be used once a week on pump.eco: pick another one. Nothing was sent.`, 409); }
+  if (row.status === 'prepared') { const left = tickerLockedFor(row.symbol, row.launcher, { landedOnly: true }); if (left > 0) throw new ApiError(`The ticker ${row.symbol} was launched here while you were signing, so it is locked. Pick another one. Nothing was sent.`, 409); }
   if (inFlight.has(mint)) throw new ApiError('This launch is already being sent.', 409);
   inFlight.add(mint);
   try {

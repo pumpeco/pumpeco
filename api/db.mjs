@@ -85,6 +85,8 @@ addColumn('launches', 'holder_rewards', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('launches', 'crowned_at', 'INTEGER');
 // origin 'site' (launched here) | 'external' (a pump.fun coin listed by the operator, scripts/list-coin.mjs)
 addColumn('launches', 'origin', "TEXT NOT NULL DEFAULT 'site'");
+// anti-vamp: the ticker lock the creator picked at launch, in ms (NULL = launched before the choice: 7 days)
+addColumn('launches', 'lock_ms', 'INTEGER');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS replies_signed ON replies(wallet, signed_at)');
 
 export const now = () => Date.now();

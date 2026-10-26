@@ -56,6 +56,7 @@ const mintOf = (p) => sol.requireMint(p.mint).toBase58();
 route('GET', '/api/config', async ({ query }) => ({
   launchReady: launch.configured(), launchOpen: launch.launchOpen() || launch.launchAllowed(query.get('wallet')), windowOnly: launch.WINDOW_ONLY, publicUrl: launch.PUBLIC_URL, official: coins.official(), devBuyReady: await launch.devBuyReady(), maxDevBuySol: launch.MAX_DEV_BUY_SOL, deployCostSol: Number(launch.DEPLOY_COST_LAMPORTS) / 1e9,
   vanity: { ready: !vanity.REQUIRED || vanity.available() > 0, available: vanity.available(), fresh: vanity.freshCount(), reserve: vanity.GRADUATION_RESERVE, required: vanity.REQUIRED, suffix: vanity.SUFFIX }, explorer: sol.EXPLORER, solUsd: await sol.solUsd().catch(() => null),
+  tickerLocks: { options: Object.entries(launch.TICKER_LOCKS).map(([id, ms]) => ({ id, ms })), default: launch.DEFAULT_TICKER_LOCK },
   limits: { name: launch.NAME_MAX, symbol: launch.SYMBOL_MAX, description: launch.DESCRIPTION_MAX, reply: coins.REPLY_MAX },
   window: { firstBuyMaxSol: await window.firstBuyMaxLamports().then((l) => (l == null ? null : Number(l) / 1e9)).catch(() => null), firstBuyMaxPct: window.FIRST_BUY_MAX_SUPPLY_PCT, ready: await window.ready().catch(() => false), sizes: await window.sizes().catch(() => []), limits: window.LIMITS, platform: window.PLATFORM.toBase58(), hookProgram: window.HOOK_PROGRAM.toBase58(), deployCostSol: Number(launch.WINDOW_DEPLOY_COST_LAMPORTS) / 1e9, rules: true },
 }));

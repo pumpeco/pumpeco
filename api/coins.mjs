@@ -41,6 +41,8 @@ async function view(row, solUsd) {
     socials: JSON.parse(row.socials_json || '{}'), metadataUri: row.metadata_uri, createdAt: row.live_at || row.created_at, bumpedAt: row.bumped_at, replies,
     sig: row.sig,
     kind: row.kind || 'pump', window: win, holderRewards: Boolean(row.holder_rewards), crownedAt: row.crowned_at, origin: row.origin || 'site',
+    // anti-vamp: the ticker lock picked at launch (api/launch.mjs; NULL = launched before the choice, 7 days)
+    tickerLock: { ms: row.lock_ms ?? 7 * 86_400_000, until: (row.created_at) + (row.lock_ms ?? 7 * 86_400_000) },
     quote: st?.isSol === false ? { mint: st.quoteMint, capQ: st.capQ } : null,
     complete: st?.complete ?? false, priceSol: st?.priceSol ?? null, capSol: st?.capSol ?? null, capUsd: st?.capSol != null && solUsd ? st.capSol * solUsd : null,
     progress: st?.progress ?? null, realSol: st?.realSol ?? null, tokensLeft: st?.tokensLeft ?? null, pool: st?.pool ?? null, onChainCreator: st?.creator ?? null,

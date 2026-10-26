@@ -9,6 +9,7 @@ import RulesPicker, { RulesLines, RuleSettings, RULE_COLOR } from '../components
 import { DEFAULT_FORM, toRules, describeRules, parseWallets, CATALOG } from '../lib/rulesText.js';
 import { fillList } from '../lib/lists.js';
 
+const LOCK_LABEL = { '24h': '24 hours', '3d': '3 days', '7d': '7 days' };
 const readFile = (f) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
 
 export default function Create({ cfg }) {
@@ -33,6 +34,8 @@ export default function Create({ cfg }) {
   const [rf, setRf] = useState(DEFAULT_FORM); // the hook rules picked (components/Rules.jsx)
   const [live, setLive] = useState(null);    // the coin's mint once it is live but its list is unfinished
   const [rewards, setRewards] = useState('creator');
+  const lockOptions = cfg.tickerLocks?.options || [{ id: '24h' }, { id: '3d' }, { id: '7d' }];
+  const [tickerLock, setTickerLock] = useState(cfg.tickerLocks?.default || '24h');
   const [pair, setPair] = useState(null); // null = SOL, else { mint, symbol, icon, ... }
   const [pairFee, setPairFee] = useState(0);
   const windows = cfg.window?.ready ? cfg.window : null;
@@ -77,7 +80,7 @@ export default function Create({ cfg }) {
     } catch (e) { if (!cancelled(e)) setError(e.message); return; }
     try {
       setStep('prepare');
-      const p = await api.prepareLaunch({ wallet, ...form, symbol: form.symbol.trim().toUpperCase(), imageData, devBuySol: windows ? 0 : Number(devBuy) || 0,
+      const p = await api.prepareLaunch({ wallet, ...form, symbol: form.symbol.trim().toUpperCase(), imageData, tickerLock, devBuySol: windows ? 0 : Number(devBuy) || 0,
         holderRewards: rewards === 'holders', ...(windows ? { devBuySol: windows.limits?.firstBuy ? Number(devBuy) || 0 : 0, window: { openSecs, windowMinutes, sizeSol: size, maxWalletPct, holderRewards: rewards === 'holders', pair: pair?.mint || null, pumpCreatorFeeBps: pair ? pairFee : 0, ...(rules ? { rules } : {}) } } : {}) });
       setStep('sign');
       const signed = await w.signTransaction(p.transaction);
@@ -118,6 +121,11 @@ export default function Create({ cfg }) {
             </div>
             {tickerLocked && <div className="err">{tick.text}</div>}
             {tick && !tick.locked && tick.symbol === symbol && <div className="muted xs">{symbol} is free.</div>}
+            <div className="field"><label>Ticker lock</label>
+              <select value={tickerLock} onChange={(e) => setTickerLock(e.target.value)} disabled={Boolean(step)} style={{ width: '100%' }}>
+                {lockOptions.map((o) => <option key={o.id} value={o.id}>{LOCK_LABEL[o.id] || o.id}</option>)}
+              </select>
+              <div className="muted xs">nobody can launch a coin with this ticker here until the lock ends, your own wallet included.</div></div>
             <div className="field"><label>description</label><textarea value={form.description} onChange={set('description')} maxLength={1000} /></div>
             <div className="field">
               <label>image</label>
@@ -193,6 +201,7 @@ export default function Create({ cfg }) {
             <div className="ptok-rules">
               {maxWalletPct > 0 && !rf.on.chapters && <div className="prule"><span className="rdot" style={{ background: '#86efac', color: '#86efac' }} /><span className="prule-t">max per wallet {maxWalletPct}%</span><span className="prule-k">fair launch</span></div>}
               {picked.map((x) => <div key={x.id} className="prule"><span className="rdot" style={{ background: RULE_COLOR[x.id], color: RULE_COLOR[x.id] }} /><span className="prule-t">{x.t}</span><span className="prule-k">{x.group}</span></div>)}
+              <div className="prule"><span className="rdot" style={{ background: '#f9a8d4', color: '#f9a8d4' }} /><span className="prule-t">ticker lock {LOCK_LABEL[tickerLock] || tickerLock}</span><span className="prule-k">anti-vamp</span></div>
               {!picked.length && !(maxWalletPct > 0) && <div className="prule dim">no rules picked</div>}
             </div>
             {windows && <div className="ptok-foot"><span>{sizeNow ? `${capText(sizeNow)} market cap` : ''}</span><span>then pump.fun</span></div>}

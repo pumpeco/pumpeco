@@ -28,7 +28,7 @@ export default function How({ cfg }) {
         <Step n="1" title="Create the Coin">
           <p>Choose the name, ticker, image and links for your coin.</p>
           <p>Every token address ends in <span className="green">pump</span>. The coin's core data is written on chain at launch and cannot be changed afterwards.</p>
-          <p>A ticker can be used once every 7 days. Once a coin launches with a ticker, nobody can launch another coin with the same ticker until 7 days have passed. This stops copycats from riding a launch.</p>
+          <p>Pick a ticker lock of 24 hours, 3 days or 7 days. Once a coin launches with a ticker, nobody can launch another coin with the same ticker until its lock ends, the creator included. This stops copycats from riding a launch.</p>
         </Step>
         <Step n="2" title="Choose When Trading Opens">
           <p>Set a launch delay between 5 seconds and 1 minute.</p>
