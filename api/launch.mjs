@@ -129,15 +129,23 @@ export const metadataJson = (form, imageUrl) => ({
  * Writes the metadata this site serves: the image is already stored by content hash (api/images.mjs), the JSON goes beside
  * it under its own hash. Returns the URI create_v2 (or the Meteora pool) records. Pinned to IPFS too, in the background.
  */
-export function publishMetadata({ image, form, shownImage }) {
+export async function publishMetadata({ image, form, shownImage }) {
   const imageName = shownImage.split('/').pop();
-  const imageUrl = `${PUBLIC_URL}/img/${imageName}`;
-  const json = JSON.stringify(metadataJson(form, imageUrl));
-  const name = `${createHash('sha256').update(json).digest('hex').slice(0, 32)}.json`;
-  const file = path.join(META_DIR, name);
-  if (!fs.existsSync(file)) fs.writeFileSync(file, json);
-  if (env('PINATA_JWT', '')) pinMetadata({ image, form }).then((p) => console.log(`[meta] IPFS backup ${p.uri}`), (e) => console.error('[meta] IPFS backup failed:', e.message));
-  return { uri: `${PUBLIC_URL}/meta/${name}`, metadata: JSON.parse(json), name };
+  const local = () => {
+    const json = JSON.stringify(metadataJson(form, `${PUBLIC_URL}/img/${imageName}`));
+    const name = `${createHash('sha256').update(json).digest('hex').slice(0, 32)}.json`;
+    const file = path.join(META_DIR, name);
+    if (!fs.existsSync(file)) fs.writeFileSync(file, json);
+    return { uri: `${PUBLIC_URL}/meta/${name}`, metadata: JSON.parse(json), name, host: 'site' };
+  };
+  // ⭐ PINATA FIRST (operator, 7 Nov 2026): the image and the metadata JSON are pinned and the coin records the Pinata
+  //    gateway URI on chain. Our own copy is still written (served at /meta, /img) and is the fallback if Pinata fails.
+  const own = local();
+  if (env('PINATA_JWT', '')) {
+    try { const p = await pinMetadata({ image, form }); return { ...p, name: own.name, host: 'pinata' }; }
+    catch (e) { console.error(`[meta] Pinata failed (${e.message}); this coin's metadata is hosted here instead`); }
+  }
+  return own;
 }
 /** GET /meta/<name>: the JSON as written, long-cached (content-hashed). False when there is no such file. */
 export function serveMetadata(res, name) {
@@ -149,7 +157,10 @@ export function serveMetadata(res, name) {
   return true;
 }
 
-/** Pinata v3 Files API (public network): the image, then the JSON around it. A durable backup of what this site hosts. */
+/** The gateway written into a coin's metadata: Pinata's public one serves any pinned CID to wallets, indexers and pump.fun
+ *  (⛔ ipfs.io answers only browsers running its service worker since Oct 2026). PINATA_GATEWAY may name a dedicated one. */
+export const PINATA_GATEWAY = env('PINATA_GATEWAY', 'https://gateway.pinata.cloud').replace(/\/$/, '');
+/** Pinata v3 Files API (public network): the image, then the JSON around it. What the coin's metadata URI points to. */
 export async function pinMetadata({ image, form }) {
   const jwt = env('PINATA_JWT', '');
   if (!jwt) throw new ApiError('No IPFS key.', 503);
@@ -168,11 +179,11 @@ export async function pinMetadata({ image, form }) {
   const ext = { 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' }[image.type] || '.jpg';
   const imageCid = await pin(new Blob([image.bytes], { type: image.type }), `${form.symbol}-image${ext}`);
   const metadata = {
-    name: form.name, symbol: form.symbol, description: form.description, image: `https://ipfs.io/ipfs/${imageCid}`, showName: true, createdOn: 'https://pump.fun',
+    name: form.name, symbol: form.symbol, description: form.description, image: `${PINATA_GATEWAY}/ipfs/${imageCid}`, showName: true, createdOn: 'https://pump.fun',
     ...(form.socials.twitter ? { twitter: form.socials.twitter } : {}), ...(form.socials.telegram ? { telegram: form.socials.telegram } : {}), ...(form.socials.website ? { website: form.socials.website } : {}),
   };
   const metaCid = await pin(new Blob([JSON.stringify(metadata)], { type: 'application/json' }), `${form.symbol}-metadata.json`);
-  return { uri: `https://ipfs.io/ipfs/${metaCid}`, metadata };
+  return { uri: `${PINATA_GATEWAY}/ipfs/${metaCid}`, metadata };
 }
 
 /* ───────────── the transaction ───────────── */
@@ -302,7 +313,7 @@ async function prepareFor(launcher, body, ip) {
   // every CA ends in `fair` (the vanity suffix): the pool is checked BEFORE the image is pinned (so refusing costs nothing) and a key taken after
   if (vanity.REQUIRED && !vanity.hasReservation(launcher) && vanity.available() === 0) throw new ApiError('No fair address is ready right now. Try again in a few minutes.', 503);
   const shownImage = images.storeImage(image.bytes);
-  const meta = publishMetadata({ image, form, shownImage });
+  const meta = await publishMetadata({ image, form, shownImage });
   let mint = vanity.issueKey(launcher, ip);
   // the launcher's reserved key may already carry their previous launch: then it is spent, issue another
   for (let i = 0; mint && i < 3 && (await sol.conn.getAccountInfo(mint.publicKey, 'confirmed')); i++) { vanity.markLaunched(mint.publicKey.toBase58()); mint = vanity.issueKey(launcher, ip); }

@@ -5,6 +5,20 @@ import CoinCard from '../components/CoinCard.jsx';
 import { Crown } from '../components/Chrome.jsx';
 import { ago, usdK } from '../lib/format.js';
 
+/** Our own coin's CA under the hero: a placeholder until it exists, then the CA with a copy button (the board refreshes
+ *  every 10 s, so it appears by itself the moment the coin goes live). */
+function CaLine({ official }) {
+  const [copied, setCopied] = useState(false);
+  if (!official) return <div className="ca-line muted sm">CA: coming soon</div>;
+  const copy = () => { navigator.clipboard?.writeText(official.mint).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); };
+  return (
+    <div className="ca-line sm">
+      <span className="muted">CA:</span> <Link href={`/coin/${official.mint}`} className="green ca-mint">{official.mint}</Link>
+      <button className="bracket" onClick={copy}>{copied ? '[copied]' : '[copy]'}</button>
+    </div>
+  );
+}
+
 export default function Board() {
   const [data, setData] = useState(null);
   const [sort, setSort] = useState('created');
@@ -35,6 +49,7 @@ export default function Board() {
   return (
     <main className="wrap">
       <div className="hero"><Link href="/create">[launch coin]</Link></div>
+      <CaLine official={data?.official} />
       {data?.king && (
         <>
           <div className="koth-title"><Crown />King of the hill<Crown /></div>

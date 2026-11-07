@@ -76,7 +76,7 @@ export async function list({ sort = 'bump', order = 'desc', q = '' } = {}) {
   const oi = out.findIndex((c) => c.origin === 'official');
   if (oi > 0) out.unshift(out.splice(oi, 1)[0]);
   const king = crown(out);
-  return { coins: out, king, kothUsd: KOTH_USD, solUsd };
+  return { coins: out, king, kothUsd: KOTH_USD, solUsd, official: official() };
 }
 
 export async function coin(mint) {

@@ -138,7 +138,7 @@ const p2 = await step('prepare (no first buy, holder rewards asked for)', () => 
 const s2 = await step('submit 2', () => launch.submit({ mint: p2.mint, transaction: signB64(p2.transaction, [B2]) }));
 check('second coin live', s2?.status === 'live');
 check('holder rewards asked for on a classic launch: ignored, the creator is the fee wallet', (await pump.coinState(conn, p2.mint))?.creator === one('SELECT fee_wallet FROM launches WHERE mint = ?', p2.mint)?.fee_wallet);
-check('metadata URI is hosted by the site', one('SELECT metadata_uri AS u FROM launches WHERE mint = ?', p2.mint).u.startsWith('http://127.0.0.1:5480/meta/'));
+check('metadata URI is on Pinata (pinned image + JSON, the gateway the coin records)', /^https:\/\/gateway\.pinata\.cloud\/ipfs\/bafkrei/.test(one('SELECT metadata_uri AS u FROM launches WHERE mint = ?', p2.mint).u));
 board = await coins.list({ sort: 'cap' });
 check('board: 2 coins, the traded one is king, cap sort', board.coins.length === 2 && board.king.mint === MINT && board.coins[0].mint === MINT);
 check('bump order puts the newest activity first', (await coins.list({ sort: 'bump' })).coins[0].mint === p2.mint);

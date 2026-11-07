@@ -173,3 +173,7 @@ img { display: block; }
 .days button { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 12px; }
 .days button.on { color: #000; background: var(--green); border-color: var(--green); }
 @media (max-width: 480px) { .rfields.three, .rfields .three, .rfields.two, .rfields .two { grid-template-columns: 1fr; } }
+
+/* our coin's CA under the hero */
+.ca-line { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; margin: -4px 0 14px; text-align: center; }
+.ca-mint { word-break: break-all; }

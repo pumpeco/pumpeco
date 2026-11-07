@@ -24,10 +24,12 @@ export default function App() {
   const path = usePath();
   const [cfg, setCfg] = useState(FALLBACK);
   useEffect(() => {
-    const load = () => api.config().then((c) => setCfg({ ...FALLBACK, ...c })).catch(() => {});
-    load();
-    const t = setInterval(() => { if (!document.hidden) load(); }, 60_000);
-    return () => clearInterval(t);
+    // every 5 s while launching is closed (it opens by itself the moment our coin goes live), every minute after
+    let t, closed = true;
+    const load = () => api.config().then((c) => { closed = c.launchOpen === false; setCfg({ ...FALLBACK, ...c }); }).catch(() => {});
+    const tick = () => { if (!document.hidden) load(); t = setTimeout(tick, closed ? 5_000 : 60_000); };
+    load().finally(() => { t = setTimeout(tick, closed ? 5_000 : 60_000); });
+    return () => clearTimeout(t);
   }, []);
   return (
     <WalletProvider>

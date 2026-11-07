@@ -36,7 +36,9 @@ export async function goLive(mint, { log = console.log, plan: p = plan() } = {})
   let md = null;
   try { md = await getTokenMetadata(sol.conn, m, 'confirmed', TOKEN_2022_PROGRAM_ID); } catch {}
   let json = {};
-  if (md?.uri) try { json = await (await fetch(md.uri, { signal: AbortSignal.timeout(6000), headers: { 'user-agent': 'Mozilla/5.0' } })).json(); } catch (e) { log(`metadata JSON not readable yet (${String(e.message).slice(0, 60)}): the plan fills in`); }
+  // the staged plan already carries the name, ticker and image: the chain's JSON is fetched only when the plan lacks one
+  // (go-live must take a second, not the 6 s a slow metadata host can take)
+  if (md?.uri && !(p?.name && p?.symbol && p?.image)) try { json = await (await fetch(md.uri, { signal: AbortSignal.timeout(6000), headers: { 'user-agent': 'Mozilla/5.0' } })).json(); } catch (e) { log(`metadata JSON not readable yet (${String(e.message).slice(0, 60)}): the plan fills in`); }
   const name = p?.name || md?.name || json.name || mint.slice(0, 6);
   const symbol = p?.symbol || md?.symbol || json.symbol || '';
   const image = p?.image || (await images.cacheImage(json.image).catch(() => null)) || null;

@@ -71,7 +71,6 @@ export default function PairPicker({ value, onChange, disabled }) {
               {!shown.length && <div className="muted sm" style={{ textAlign: 'center' }}>no pair matches "{query}". paste its address to check it.</div>}
             </div>
           )}
-          <p className="muted xs" style={{ margin: 0 }}>your coin trades in SOL on its curve. at migration the Pumpfun coin is created paired with this token: the raise is swapped into it, or for a Pumpfun coin bought through its own pool. if the pair cannot be used at that moment, it migrates against SOL.</p>
         </Modal>
       )}
     </>
