@@ -87,6 +87,13 @@ addColumn('launches', 'crowned_at', 'INTEGER');
 addColumn('launches', 'origin', "TEXT NOT NULL DEFAULT 'site'");
 // anti-vamp: the ticker lock the creator picked at launch, in ms (NULL = launched before the choice: 7 days)
 addColumn('launches', 'lock_ms', 'INTEGER');
+// creator fees → liquidity (7 Nov 2026): the coin's pump.fun creator, a wallet this site holds (api/feewallets.mjs)
+addColumn('launches', 'fee_wallet', 'TEXT');
+// every liquidity keeper transaction that landed (api/liquidity.mjs): what the coin page adds up
+db.exec(`CREATE TABLE IF NOT EXISTS liquidity (
+  sig TEXT PRIMARY KEY, mint TEXT NOT NULL, step TEXT NOT NULL, lamports TEXT NOT NULL DEFAULT '0', tokens TEXT NOT NULL DEFAULT '0',
+  lp TEXT NOT NULL DEFAULT '0', created_at INTEGER NOT NULL)`);
+db.exec('CREATE INDEX IF NOT EXISTS liquidity_mint ON liquidity(mint, created_at)');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS replies_signed ON replies(wallet, signed_at)');
 
 export const now = () => Date.now();

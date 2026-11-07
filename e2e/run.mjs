@@ -61,7 +61,7 @@ const sub = await step('submit', () => launch.submit({ mint: MINT, transaction: 
 check('launch is live', sub?.status === 'live', sub?.sig?.slice(0, 16));
 check('mint secret deleted once live', one('SELECT mint_secret FROM launches WHERE mint = ?', MINT)?.mint_secret == null);
 const st0 = await pump.coinState(conn, MINT);
-check('curve exists, creator is the launcher, on its curve', st0 && st0.creator === w(L) && !st0.complete, `progress ${(st0?.progress * 100).toFixed(2)}%`);
+check('curve exists, creator is the coin\'s fee wallet (creator fees go to liquidity), on its curve', st0 && st0.creator === one('SELECT fee_wallet FROM launches WHERE mint = ?', MINT)?.fee_wallet && st0.creator !== w(L) && !st0.complete, `progress ${(st0?.progress * 100).toFixed(2)}%`);
 const got = await held(L, M);
 check('the first buy landed within slippage', got >= (BigInt(p.expectedTokens) * 97n) / 100n && got <= (BigInt(p.expectedTokens) * 102n) / 100n, `${(Number(got) / 1e6).toFixed(0)} tokens`);
 check('launcher paid about 1 SOL + deploy cost', before - (await lam(L.publicKey)) > 1_010_000_000n && before - (await lam(L.publicKey)) < 1_060_000_000n, `${(Number(before - (await lam(L.publicKey))) / 1e9).toFixed(4)} SOL`);
@@ -134,10 +134,10 @@ check('board counts the replies', (await coins.list({})).coins[0].replies === 2)
 check('search finds a coin by its full mint address', (await coins.list({ q: MINT })).coins.length === 1);
 
 /* ── 6. a second launch, no first buy, by another wallet; limits; reconcile ── */
-const p2 = await step('prepare (no first buy, holder rewards)', () => launch.prepare({ wallet: w(B2), name: 'Plain', symbol: 'PLAIN', imageData: img, holderRewards: true }));
+const p2 = await step('prepare (no first buy, holder rewards asked for)', () => launch.prepare({ wallet: w(B2), name: 'Plain', symbol: 'PLAIN', imageData: img, holderRewards: true }));
 const s2 = await step('submit 2', () => launch.submit({ mint: p2.mint, transaction: signB64(p2.transaction, [B2]) }));
 check('second coin live', s2?.status === 'live');
-check('holder rewards: the curve creator is the holder-rewards PDA', (await pump.coinState(conn, p2.mint))?.creator === pump.holderRewardsAddress(new PublicKey(p2.mint)).toBase58());
+check('holder rewards asked for on a classic launch: ignored, the creator is the fee wallet', (await pump.coinState(conn, p2.mint))?.creator === one('SELECT fee_wallet FROM launches WHERE mint = ?', p2.mint)?.fee_wallet);
 check('metadata URI is hosted by the site', one('SELECT metadata_uri AS u FROM launches WHERE mint = ?', p2.mint).u.startsWith('http://127.0.0.1:5480/meta/'));
 board = await coins.list({ sort: 'cap' });
 check('board: 2 coins, the traded one is king, cap sort', board.coins.length === 2 && board.king.mint === MINT && board.coins[0].mint === MINT);

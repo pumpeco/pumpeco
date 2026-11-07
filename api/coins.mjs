@@ -94,7 +94,15 @@ export async function coin(mint) {
   let holders = [];
   // a graduated window token: the holders that matter are the pump.fun coin's
   try { holders = await holdersOf(v.window?.pumpMint || mint); } catch {}
-  return { ...v, solUsd, prices, trades, holders, replies: replies(mint), replyCount: v.replies };
+  return { ...v, solUsd, prices, trades, holders, replies: replies(mint), replyCount: v.replies, liquidity: liquidityOf(row) };
+}
+
+/** Creator fees → liquidity (api/liquidity.mjs): the coin's fee wallet and the SOL of fees put into its pool, LP burned. */
+function liquidityOf(row) {
+  if (!row.fee_wallet) return null;
+  let lamports = 0n, lp = 0n, deposits = 0;
+  for (const r of all("SELECT step, lamports, lp FROM liquidity WHERE mint = ? AND step IN ('buy', 'deposit')", row.mint)) { lamports += BigInt(r.lamports); lp += BigInt(r.lp); if (r.step === 'deposit') deposits++; }
+  return { feeWallet: row.fee_wallet, addedSol: Number(lamports) / 1e9, lpBurned: String(lp), deposits };
 }
 
 /** The 20 largest holders, with the bonding curve labelled. One RPC call. */

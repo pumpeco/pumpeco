@@ -26,9 +26,9 @@ export default function How({ cfg }) {
         <Step n="2" title="Pick a Ticker Lock">
           <p>Pick a ticker lock of 24 hours, 3 days or 7 days. Once a coin launches with a ticker, nobody can launch another coin with the same ticker here until its lock ends, the creator included. This stops copycats from riding a launch.</p>
         </Step>
-        <Step n="3" title="Choose Where Creator Rewards Go">
-          <ul><li>The creator, following Pumpfun's reward schedule</li><li>The holders, permanently</li></ul>
-          <p>This choice is fixed at launch.</p>
+        <Step n="3" title="Creator Fees Deepen Liquidity">
+          <p>Every coin launched here sends its creator fees into its own liquidity. While the coin is on the bonding curve the fees wait. Once it graduates to PumpSwap, they are added to the coin's pool and the LP tokens are burned, so that liquidity stays in the pool forever.</p>
+          <p>The more a coin trades, the deeper its pool gets.</p>
         </Step>
         <Step n="4" title="Approve in Your Wallet">
           <p>Your wallet signs the launch. The coin is live on Pumpfun as soon as the transaction lands, at a cost of about {cfg.deployCostSol ?? 0.025} SOL.</p>

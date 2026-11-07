@@ -6,7 +6,8 @@
  *            the mint key, hand it to the browser.
  *   submit:  the browser returns it signed by the wallet; it must be the prepared transaction byte for byte (payer = the
  *            launcher). Relayed, then the coin is live once its bonding curve exists on chain.
- * The launcher is pump.fun's creator (creator rewards go to them), exactly as on pump.fun's own site.
+ * ⛔ The launcher is NOT pump.fun's creator (operator, 7 Nov 2026): every coin's creator is its own fee wallet (api/feewallets.mjs)
+ *    and its creator fees become burned liquidity on its pool once it graduates (api/liquidity.mjs). The launcher signs and pays.
  */
 import { ComputeBudgetProgram, Keypair, PublicKey, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
@@ -21,6 +22,7 @@ import { ApiError } from './errors.mjs';
 import * as images from './images.mjs';
 import * as vanity from './vanity.mjs';
 import * as window from './window.mjs';
+import * as feeWallets from './feewallets.mjs';
 import { TOKEN_2022, ata, createV2Ix, buyExactSolInIx, loadGlobal, bondingCurveAddress, holderRewardsAddress, tokensForSol, loadLookupTable } from '../lib/pump.mjs';
 
 export const NAME_MAX = 32;
@@ -92,8 +94,8 @@ export function validate(body) {
   const devBuy = Number(body.devBuySol || 0);
   if (!(devBuy >= 0 && devBuy <= MAX_DEV_BUY_SOL)) throw new ApiError(`The first buy is 0 to ${MAX_DEV_BUY_SOL} SOL`);
   if (devBuy > 0 && !FIRST_BUYS && !body.window) throw new ApiError('First buys are off on this site. Launch without one.');
-  // pump.fun's creator-rewards choice, fixed at launch: the creator keeps them (the fee schedule) or they go to holders forever
-  const holderRewards = body.holderRewards === true || body.holderRewards === 'holders';
+  // creator fees always go to the coin's liquidity here (7 Nov 2026); pump.fun's holder-rewards choice is only for window launches
+  const holderRewards = Boolean(body.window) && (body.holderRewards === true || body.holderRewards === 'holders');
   const socials = {
     website: cleanUrl(body.website),
     twitter: cleanUrl(body.twitter, ['x.com', 'twitter.com']),
@@ -173,11 +175,10 @@ export async function pinMetadata({ image, form }) {
 
 /* ───────────── the transaction ───────────── */
 
-export async function buildLaunchTx({ mint, launcher, form, uri }) {
-  const l = new PublicKey(launcher), m = mint.publicKey;
-  const ixs = [...budget(form.devBuyLamports > 0n ? 300_000 : 200_000), await createV2Ix(sol.conn, { mint: m, user: l, name: form.name, symbol: form.symbol, uri, creator: l, holderRewards: form.holderRewards })];
-  // with holder rewards the curve's creator IS the holder-rewards PDA: the first buy's creator vault derives from it
-  const curveCreator = form.holderRewards ? holderRewardsAddress(m) : l;
+export async function buildLaunchTx({ mint, launcher, form, uri, feeWallet }) {
+  const l = new PublicKey(launcher), m = mint.publicKey, creator = new PublicKey(feeWallet);
+  const ixs = [...budget(form.devBuyLamports > 0n ? 300_000 : 200_000), await createV2Ix(sol.conn, { mint: m, user: l, name: form.name, symbol: form.symbol, uri, creator, holderRewards: false })];
+  const curveCreator = creator;
   let expectedTokens = 0n;
   if (form.devBuyLamports > 0n) {
     const global = await loadGlobal(sol.conn);
@@ -304,12 +305,16 @@ async function prepareFor(launcher, body, ip) {
   // A row marked failed whose coin is on chain after all (a lost answer) is the live coin: never deleted or re-prepared.
   if (prior && (await onChain(m).catch(() => true))) { markLive(prior, prior.sig); throw new ApiError('This coin already exists on chain. It is live on the board.', 409); }
   if (prior) run('DELETE FROM launches WHERE mint = ?', m);
-  let tx, hash, expectedTokens = 0n, extra = {};
+  let tx, hash, expectedTokens = 0n, extra = {}, feeWallet = null;
   if (win) {
     const b = await window.build({ launcher, name: form.name, symbol: form.symbol, uri: meta.uri, window: { ...win, holderRewards: form.holderRewards }, mint, devBuyLamports: form.devBuyLamports });
     tx = b.tx; hash = msgHash(tx); extra = { pool: b.pool, config: b.config };
     window.recordPair(m, pair); // the graduator reads it when the launch registers
-  } else ({ tx, hash, expectedTokens } = await buildLaunchTx({ mint, launcher, form, uri: meta.uri }));
+  } else {
+    // the key is on disk before the transaction naming it as creator exists
+    feeWallet = feeWallets.create().publicKey.toBase58();
+    ({ tx, hash, expectedTokens } = await buildLaunchTx({ mint, launcher, form, uri: meta.uri, feeWallet }));
+  }
   // Simulated BEFORE the wallet is asked to sign: whatever pump.fun would refuse is refused here, with a reason.
   const sim = await sol.conn.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true }).catch(() => null);
   if (sim?.value?.err) {
@@ -320,10 +325,10 @@ async function prepareFor(launcher, body, ip) {
   // ⛔ checked AGAIN with no await between the check and the insert (sqlite is synchronous): two wallets preparing the same
   //    ticker at once both passed the first check seconds ago; only the first to reach this line gets a row
   tickerFree();
-  run(`INSERT INTO launches (mint, launcher, name, symbol, description, image, metadata_uri, socials_json, dev_buy_lamports, tx_hash, mint_secret, status, created_at, bumped_at, updated_at, kind, pool, config, size_sol, open_secs, window_minutes, holder_rewards, lock_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  run(`INSERT INTO launches (mint, launcher, name, symbol, description, image, metadata_uri, socials_json, dev_buy_lamports, tx_hash, mint_secret, status, created_at, bumped_at, updated_at, kind, pool, config, size_sol, open_secs, window_minutes, holder_rewards, lock_ms, fee_wallet)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   m, launcher, form.name, form.symbol, form.description, shownImage, meta.uri, JSON.stringify(form.socials), String(form.devBuyLamports), hash, JSON.stringify([...mint.secretKey]), now(), now(), now(),
-  win ? 'window' : 'pump', extra.pool ?? null, extra.config ?? null, win?.sizeSol ?? null, win?.openSecs ?? null, win?.windowMinutes ?? null, form.holderRewards ? 1 : 0, lockMs);
+  win ? 'window' : 'pump', extra.pool ?? null, extra.config ?? null, win?.sizeSol ?? null, win?.openSecs ?? null, win?.windowMinutes ?? null, form.holderRewards ? 1 : 0, lockMs, feeWallet);
   return { mint: m, kind: win ? 'window' : 'pump', transaction: sol.b64(tx), expectedTokens: String(expectedTokens), costSol: Number(win ? WINDOW_DEPLOY_COST_LAMPORTS : DEPLOY_COST_LAMPORTS) / 1e9 };
 }
 

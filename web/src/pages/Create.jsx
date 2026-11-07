@@ -78,7 +78,7 @@ export default function Create({ cfg }) {
     try {
       setStep('prepare');
       const p = await api.prepareLaunch({ wallet, ...form, symbol: form.symbol.trim().toUpperCase(), imageData, tickerLock, devBuySol: windows ? 0 : Number(devBuy) || 0,
-        holderRewards: rewards === 'holders', ...(windows ? { devBuySol: windows.limits?.firstBuy ? Number(devBuy) || 0 : 0, window: { openSecs, windowMinutes, sizeSol: size, maxWalletPct, holderRewards: rewards === 'holders', pair: pair?.mint || null, pumpCreatorFeeBps: pair ? pairFee : 0, ...(rules ? { rules } : {}) } } : {}) });
+        ...(windows ? { holderRewards: rewards === 'holders', devBuySol: windows.limits?.firstBuy ? Number(devBuy) || 0 : 0, window: { openSecs, windowMinutes, sizeSol: size, maxWalletPct, holderRewards: rewards === 'holders', pair: pair?.mint || null, pumpCreatorFeeBps: pair ? pairFee : 0, ...(rules ? { rules } : {}) } } : {}) });
       setStep('sign');
       const signed = await w.signTransaction(p.transaction);
       setStep('send');
@@ -201,10 +201,7 @@ export default function Create({ cfg }) {
             <h2>choose how many [{form.symbol.trim().toUpperCase() || 'coins'}] you want to buy (optional)</h2>
             <p className="muted sm">tip: it's optional but buying a small amount of coins helps protect your coin from snipers</p>
           </> : <h2>launch [{form.symbol.trim().toUpperCase() || 'your coin'}]</h2>}
-          <div className="field"><label>creator rewards (fixed at launch)</label>
-            <select value={rewards} onChange={(e) => setRewards(e.target.value)} disabled={Boolean(step)} style={{ width: '100%' }}>
-              <option value="creator">Creator</option><option value="holders">Holders</option>
-            </select></div>
+          <p className="muted sm">creator fees go into this coin's liquidity: once it graduates to PumpSwap they are added to its pool and the LP tokens are burned, so that liquidity can never be pulled.</p>
           {cfg.devBuyReady ? (
             <div className="amount">
               <input type="number" min="0" step="0.01" max={cfg.maxDevBuySol} value={devBuy} onChange={(e) => setDevBuy(e.target.value)} placeholder="0.0 (optional)" disabled={Boolean(step)} />

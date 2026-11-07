@@ -119,6 +119,7 @@ export default function Coin({ mint, cfg }) {
         <span className="green">market cap: {usdK(c.capUsd)}</span>
         <span className="muted">replies: {c.replyCount}</span>
         {c.kind !== 'window' && c.holderRewards && <span className="yellow sm">creator rewards to holders</span>}
+        {c.liquidity && <span className="yellow sm">{c.liquidity.addedSol > 0 ? `${c.liquidity.addedSol.toFixed(3)} SOL of creator fees added to liquidity, LP burned` : c.complete ? 'creator fees go into its liquidity' : 'creator fees go into its liquidity once it graduates'}</span>}
         {c.kind === 'window' ? (c.window?.pumpMint && <a className="bracket sm" href={pumpLink(c.window.pumpMint)} target="_blank" rel="noreferrer">[view on pump.fun]</a>) : <a className="bracket sm" href={pumpLink(c.mint)} target="_blank" rel="noreferrer">[view on pump.fun]</a>}
       </div>
       <div className="cols">
