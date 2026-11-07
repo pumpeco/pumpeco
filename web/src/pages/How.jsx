@@ -7,44 +7,56 @@ const Step = ({ n, title, children }) => (
   </div>
 );
 
-/** How it works (pump.family, 7 Nov 2026): the old Pumpfun fundamentals, on real Pumpfun coins. */
+/** How it works (pump.family, operator's text 7 Nov 2026): the fundamentals that made Pumpfun successful. */
 export default function How({ cfg }) {
   return (
     <main className="wrap">
       <div className="how">
         <Link href="/" className="bracket back">[go back]</Link>
         <h1>How It Works</h1>
-        <p className="lead">Pump Family brings back the old Pumpfun.</p>
-        <p>Pumpfun started with a simple promise: a fair launch for everyone. No presale. No team allocation. Everyone buys on the same curve, and when a coin made it, its liquidity was locked for good.</p>
-        <p>Over time that changed. Dev buys bundled into the launch, creator fees paid out to the dev on every trade, and copycat coins riding every ticker that moved. Pump Family takes it back to the fundamentals.</p>
+        <p className="lead">Pump Family brings back the fundamentals that made Pumpfun successful.</p>
+        <p>Pumpfun started with a simple idea: a fair launch for everyone. No presales, no team allocations, no privileged buys. Everyone traded on the same bonding curve, and when a coin graduated, its liquidity was locked forever.</p>
+        <p>Over time, those fundamentals changed. Dev buys, bundled launches, creator fees paid directly to developers and copycat tickers became part of the ecosystem.</p>
+        <p>Pump Family brings the focus back to fair launches, with a few rules designed to make tokens stronger from the beginning.</p>
 
         <h2>The Fundamentals</h2>
-        <Step n="1" title="No Dev Buy">
-          <p>A launch here creates the coin and nothing else. No buy is bundled into the launch transaction, so the creator starts with zero coins.</p>
-          <p>If the creator wants in, they buy on the curve like everyone else, at the same price, in the open.</p>
+        <Step n="1" title="No Dev Buys">
+          <p>Every launch creates the coin and nothing else.</p>
+          <p>No bundled buys, no team allocation and no tokens reserved for the creator. The creator starts with zero tokens.</p>
+          <p>If the creator wants to buy, they do so on the bonding curve like everyone else, at the same price and under the same conditions.</p>
         </Step>
-        <Step n="2" title="Creator Fees Go Back Into the Coin">
-          <p>On Pumpfun today, creator fees pay the dev on every trade. Here they never reach the dev.</p>
-          <p>Every coin's creator fees go into its own liquidity. While the coin is on the bonding curve the fees wait. Once it graduates to PumpSwap, they are added to the coin's pool and the LP tokens are burned, so that liquidity can never be pulled.</p>
-          <p>The more a coin trades, the deeper its pool gets. The dev wins the same way holders win: by the coin doing well.</p>
+        <Step n="2" title="Creator Fees Build Liquidity">
+          <p>Creator fees don't go to the developer. <b>100% of creator fees are used to deepen the coin's liquidity.</b></p>
+          <p>While a coin is on the bonding curve, its accumulated creator fees are held until graduation.</p>
+          <p>Once the coin graduates to PumpSwap, the accumulated fees are added to its liquidity pool and the LP tokens are burned permanently.</p>
+          <p>This means trading activity directly contributes to the coin's liquidity instead of creating continuous sell pressure from creator rewards.</p>
+          <p>The more a coin trades, the more liquidity it can build.</p>
         </Step>
-        <Step n="3" title="Liquidity Locked Forever">
-          <p>Just like the old Pumpfun burned the liquidity of every coin that graduated, every bit of liquidity added here is burned at the moment it is added. Nobody can withdraw it, not the creator and not us.</p>
+        <Step n="3" title="Ticker Locks">
+          <p>Copycat launches shouldn't be able to immediately take advantage of a ticker that is gaining traction.</p>
+          <p>Pump Family introduces configurable ticker locks.</p>
+          <p>At launch, the creator chooses between:</p>
+          <ul><li><b>24 hours</b></li><li><b>3 days</b></li><li><b>7 days</b></li></ul>
+          <p>During the selected period, nobody can launch another coin with the same ticker on Pump Family, including the original creator.</p>
+          <p>Once the lock expires, the ticker becomes available again.</p>
         </Step>
-        <Step n="4" title="No Copycats">
-          <p>The creator picks a ticker lock of 24 hours, 3 days or 7 days. Until it ends, nobody can launch another coin with the same ticker here, the creator included. A coin that takes off keeps its name.</p>
-        </Step>
-        <Step n="5" title="Real Pumpfun Coins">
-          <p>Every coin launched here is a real Pumpfun coin. It is created on Pumpfun itself, every token address ends in <span className="green">pump</span>, and it trades on Pumpfun's curve from the first block.</p>
-          <p>You can trade it here, on Pumpfun or in any app that supports Pumpfun coins. When the curve fills, it graduates to PumpSwap like any other Pumpfun coin.</p>
-        </Step>
-        <Step n="6" title="Your Wallet, Your Keys">
-          <p>This site never holds your funds. Every launch and every trade is signed by your own wallet.</p>
+        <Step n="4" title="Custom CA">
+          <p>Every token launched through Pump Family has a contract address ending in <b className="green">fair</b>.</p>
+          <p>This makes Pump Family launches easy to identify and distinguish from other tokens on Pumpfun.</p>
+          <p>When looking for a Pump Family launch, simply check that the contract address ends in fair.</p>
         </Step>
 
         <h2>Launching a Coin</h2>
-        <p>Choose the name, ticker, image and links for your coin, and pick the ticker lock. The coin's data is written on chain at launch and cannot be changed afterwards.</p>
-        <p>Your wallet signs the launch. The coin is live on Pumpfun as soon as the transaction lands, at a cost of about {cfg.deployCostSol ?? 0.025} SOL.</p>
+        <p>Launching takes less than a minute.</p>
+        <ol>
+          <li>Connect your Solana wallet.</li>
+          <li>Enter your coin's name, ticker, image and social links.</li>
+          <li>Choose your ticker lock: 24 hours, 3 days or 7 days.</li>
+          <li>Review your details and approve the launch transaction.</li>
+        </ol>
+        <p>Your coin's launch configuration is written on chain and cannot be changed afterwards.</p>
+        <p>Once your transaction is confirmed, your coin is live on Pumpfun and ready to trade.</p>
+        <p><b>Launch cost: approximately {cfg.deployCostSol ?? 0.025} SOL.</b></p>
 
         <Link href="/create" className="btn" style={{ justifySelf: 'center' }}>Launch coin</Link>
       </div>

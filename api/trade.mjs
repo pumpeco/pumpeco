@@ -13,6 +13,7 @@ import { ApiError } from './errors.mjs';
 import { TOKEN_2022, ata, buyExactSolInIx, sellIx, loadGlobal, coinState, tokensForSol, solForTokens, tokenAccountAmount } from '../lib/pump.mjs';
 import * as coins from './coins.mjs';
 import * as window from './window.mjs';
+import * as pairs from './pairs.mjs';
 
 const PRIORITY = num('TRADE_PRIORITY_MICROLAMPORTS', 100_000);
 const budget = (units) => [ComputeBudgetProgram.setComputeUnitLimit({ units }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports: PRIORITY })];
@@ -43,8 +44,9 @@ export async function prepare(body) {
   }
   const st = await coinState(sol.conn, mint);
   if (!st) throw new ApiError('This coin is not on pump.fun.', 404);
-  if (st.isSol === false) throw new ApiError('This coin is paired with another token: trade it on pump.fun.', 409);
   if (st.complete) throw new ApiError('This coin has graduated: its bonding curve is closed and it trades on PumpSwap.', 409);
+  // a custom-pair coin: bought and sold with SOL through its pair, in one transaction (api/pairs.mjs)
+  if (st.isSol === false) return pairTrade({ wallet, mint, coinMint, side, body, slippageBps, quoteMint: st.quoteMint });
   const user = new PublicKey(wallet), creator = new PublicKey(st.creator);
   const global = await globalShared();
   let ixs, quote;
@@ -96,6 +98,55 @@ export async function prepare(body) {
   pending.set(hash, { at: now(), mint: mint.toBase58(), coin: coinMint, wallet, ...quote });
   return { transaction: sol.b64(tx), quote };
 }
+
+/** Units to sell from the request: an amount, a share of the balance, or everything. */
+async function unitsToSell(user, mint, body) {
+  const acct = await sol.conn.getAccountInfo(ata(user, mint, TOKEN_2022));
+  const held = acct ? tokenAccountAmount(acct.data) : 0n;
+  if (held <= 0n) throw new ApiError('This wallet holds none of this coin.');
+  let units;
+  if (body.amount === 'all' || Number(body.pct) === 100) units = held;
+  else if (body.pct != null) { const pct = Number(body.pct); if (!(pct > 0 && pct <= 100)) throw new ApiError('Pick how much to sell.'); units = (held * BigInt(Math.round(pct * 100))) / 10_000n; }
+  else { const n = Number(body.amount); if (!(n > 0)) throw new ApiError('Enter how many coins to sell.'); units = BigInt(Math.round(n * 1e6)); }
+  if (units <= 0n) throw new ApiError('That amount sells nothing.');
+  if (units > held) throw new ApiError(`This wallet holds ${(Number(held) / 1e6).toLocaleString('en-US')} coins, fewer than that.`);
+  return units;
+}
+
+/** A custom-pair coin on its curve, traded with SOL through the pair (pump.fun multi-hop, or Jupiter + pump.fun). */
+async function pairTrade({ wallet, mint, coinMint, side, body, slippageBps, quoteMint }) {
+  const user = new PublicKey(wallet);
+  const q = await pairs.quoteOf(quoteMint);
+  let built, quote;
+  if (side === 'buy') {
+    const solIn = Number(body.amount);
+    if (!(solIn > 0 && solIn <= 1000)) throw new ApiError('Enter how much SOL to spend.');
+    const lamports = BigInt(Math.round(solIn * 1e9));
+    const balance = BigInt(await sol.conn.getBalance(user));
+    if (balance < lamports + 10_000_000n) throw new ApiError(`This wallet holds ${(Number(balance) / 1e9).toFixed(4)} SOL, not enough for this buy plus fees.`);
+    built = await pairs.buyWithSol({ user, mint, q, lamports, slippageBps });
+    if (built.expected <= 0n) throw new ApiError('That amount buys nothing.');
+    quote = { side, lamports: String(lamports), tokenUnits: String(built.expected), minTokenUnits: String(built.minOut), pair: q.mint };
+  } else {
+    const units = await unitsToSell(user, mint, body);
+    built = await pairs.sellForSol({ user, mint, q, units, slippageBps });
+    quote = { side, lamports: String(built.expected), minLamports: String(built.minOut), tokenUnits: String(units), pair: q.mint };
+  }
+  const { blockhash } = await sol.conn.getLatestBlockhash('confirmed');
+  const tx = new VersionedTransaction(new TransactionMessage({ payerKey: user, recentBlockhash: blockhash, instructions: [...budget(isPumpPair(q) ? 300_000 : 600_000), ...built.ixs] }).compileToV0Message(built.alts));
+  const sim = await sol.conn.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true }).catch(() => null);
+  if (sim?.value?.err) {
+    const why = JSON.stringify(sim.value.err), logs = (sim.value.logs || []).join(' ');
+    console.error(`[trade] pair simulation failed ${side} ${coinMint}: ${why} ${(sim.value.logs || []).slice(-4).join(' | ').slice(0, 400)}`);
+    if (/slippage|TooMuch|TooLittle|6002|6004|0x1771|0x1788/i.test(why + logs)) throw new ApiError('The price moved: raise the slippage or try again.', 409);
+    if (/InsufficientFunds|insufficient lamports|insufficient funds/i.test(why + logs)) throw new ApiError('The wallet does not hold enough SOL for this trade plus fees.', 400);
+    if (/"Custom":6108/.test(why)) throw new ApiError('This coin is in Pumpfun mayhem mode, which cannot be routed through its pair. Trade it on Pumpfun.', 409);
+    throw new ApiError(`This trade would be refused on chain (${why.slice(0, 100)}). Nothing was sent.`, 400);
+  }
+  pending.set(msgHash(tx), { at: now(), mint: coinMint, coin: coinMint, wallet, ...quote });
+  return { transaction: sol.b64(tx), quote };
+}
+const isPumpPair = (q) => q.kind === 'curve' || q.kind === 'pool';
 
 /** A trade on a window token's Meteora curve (through the hook). Buys: SOL in; sells: units or a share of the wallet's balance. */
 async function windowTrade({ wallet, mint, side, body, slippageBps, w }) {

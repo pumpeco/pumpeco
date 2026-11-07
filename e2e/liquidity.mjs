@@ -60,7 +60,7 @@ let st = await pump.coinState(conn, MINT);
 check('the coin is live with the FEE WALLET as its pump.fun creator', st?.creator === row.fee_wallet, `creator ${st?.creator}`);
 check('not the launcher', st?.creator !== w(L));
 const view = await coins.coin(MINT);
-check('coin page shows the launcher as creator and the liquidity line', view.creator === w(L) && view.liquidity?.feeWallet === row.fee_wallet && view.liquidity.addedSol === 0);
+check('coin page shows the launcher as creator and the liquidity line', view.creator === w(L) && view.liquidity?.feeWallet === row.fee_wallet && view.liquidity.added === 0);
 
 /* ── 2. trades on the curve pay the fee wallet; nothing deepens before graduation ── */
 for (const k of [B1, whale]) {

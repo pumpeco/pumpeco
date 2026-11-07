@@ -43,7 +43,7 @@ async function view(row, solUsd) {
     kind: row.kind || 'pump', window: win, holderRewards: Boolean(row.holder_rewards), crownedAt: row.crowned_at, origin: row.origin || 'site',
     // anti-vamp: the ticker lock picked at launch (api/launch.mjs; NULL = launched before the choice, 7 days)
     tickerLock: { ms: row.lock_ms ?? 7 * 86_400_000, until: (row.created_at) + (row.lock_ms ?? 7 * 86_400_000) },
-    quote: st?.isSol === false ? { mint: st.quoteMint, capQ: st.capQ } : null,
+    quote: st?.isSol === false ? { mint: st.quoteMint, capQ: st.capQ, symbol: row.pair_symbol || null } : null,
     complete: st?.complete ?? false, priceSol: st?.priceSol ?? null, capSol: st?.capSol ?? null, capUsd: st?.capSol != null && solUsd ? st.capSol * solUsd : null,
     progress: st?.progress ?? null, realSol: st?.realSol ?? null, tokensLeft: st?.tokensLeft ?? null, pool: st?.pool ?? null, onChainCreator: st?.creator ?? null,
   };
@@ -100,9 +100,19 @@ export async function coin(mint) {
 /** Creator fees → liquidity (api/liquidity.mjs): the coin's fee wallet and the SOL of fees put into its pool, LP burned. */
 function liquidityOf(row) {
   if (!row.fee_wallet) return null;
-  let lamports = 0n, lp = 0n, deposits = 0;
-  for (const r of all("SELECT step, lamports, lp FROM liquidity WHERE mint = ? AND step IN ('buy', 'deposit')", row.mint)) { lamports += BigInt(r.lamports); lp += BigInt(r.lp); if (r.step === 'deposit') deposits++; }
-  return { feeWallet: row.fee_wallet, addedSol: Number(lamports) / 1e9, lpBurned: String(lp), deposits };
+  let units = 0n, lp = 0n, deposits = 0;
+  for (const r of all("SELECT step, lamports, lp FROM liquidity WHERE mint = ? AND step IN ('buy', 'deposit')", row.mint)) { units += BigInt(r.lamports); lp += BigInt(r.lp); if (r.step === 'deposit') deposits++; }
+  // a custom-pair coin's fees are in its pair token: `added` is in that token (decimals from the pair, read once)
+  const dec = row.pair ? pairDecimals(row.pair) : 9;
+  const added = dec == null ? null : Number(units) / 10 ** dec;
+  return { feeWallet: row.fee_wallet, added, unit: row.pair ? (row.pair_symbol || 'pair') : 'SOL', addedSol: row.pair ? null : added, lpBurned: String(lp), deposits };
+}
+const decimalsCache = new Map();
+function pairDecimals(mint) {
+  if (decimalsCache.has(mint)) return decimalsCache.get(mint);
+  decimalsCache.set(mint, null);
+  sol.conn.getAccountInfo(new PublicKey(mint)).then((i) => { if (i) decimalsCache.set(mint, i.data[44]); else decimalsCache.delete(mint); }, () => decimalsCache.delete(mint));
+  return null;
 }
 
 /** The 20 largest holders, with the bonding curve labelled. One RPC call. */

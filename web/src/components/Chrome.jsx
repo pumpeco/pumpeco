@@ -10,7 +10,7 @@ export const Pill = () => (
 export const Crown = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z" /></svg>;
 const XIcon = () => <svg className="icon" viewBox="0 0 24 24"><path d="M18.9 2H22l-7.6 8.7L23.3 22h-7l-5.5-7.2L4.5 22H1.4l8.1-9.3L.8 2h7.2l5 6.6L18.9 2zm-1.2 18h1.9L7.4 3.9H5.3L17.7 20z" /></svg>;
 /** The site's own X account, once there is one (set here; empty = no icon). */
-const SOCIAL_X = ''; // no X account for pump.family yet
+const SOCIAL_X = 'https://x.com/thepumpfamily';
 
 export function Header() {
   const w = useWallet();

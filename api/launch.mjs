@@ -23,6 +23,8 @@ import * as images from './images.mjs';
 import * as vanity from './vanity.mjs';
 import * as window from './window.mjs';
 import * as feeWallets from './feewallets.mjs';
+import * as pairs from './pairs.mjs';
+import * as ag from '../ag/pump.mjs';
 import { TOKEN_2022, ata, createV2Ix, buyExactSolInIx, loadGlobal, bondingCurveAddress, holderRewardsAddress, tokensForSol, loadLookupTable } from '../lib/pump.mjs';
 
 export const NAME_MAX = 32;
@@ -175,9 +177,13 @@ export async function pinMetadata({ image, form }) {
 
 /* ───────────── the transaction ───────────── */
 
-export async function buildLaunchTx({ mint, launcher, form, uri, feeWallet }) {
+export async function buildLaunchTx({ mint, launcher, form, uri, feeWallet, quote = null }) {
   const l = new PublicKey(launcher), m = mint.publicKey, creator = new PublicKey(feeWallet);
-  const ixs = [...budget(form.devBuyLamports > 0n ? 300_000 : 200_000), await createV2Ix(sol.conn, { mint: m, user: l, name: form.name, symbol: form.symbol, uri, creator, holderRewards: false })];
+  if (quote && form.devBuyLamports > 0n) throw new ApiError('A first buy is not offered on a custom pair.');
+  // a custom pair: create_v2 with the pair's remaining accounts (ag/pump.mjs), pump.fun's own creator fee schedule
+  const create = quote ? await ag.createV2Ix(sol.conn, { mint: m, user: l, name: form.name, symbol: form.symbol, uri, creator, quote, creatorFeeBps: 0 })
+    : await createV2Ix(sol.conn, { mint: m, user: l, name: form.name, symbol: form.symbol, uri, creator, holderRewards: false });
+  const ixs = [...budget(form.devBuyLamports > 0n ? 300_000 : quote ? 250_000 : 200_000), create];
   const curveCreator = creator;
   let expectedTokens = 0n;
   if (form.devBuyLamports > 0n) {
@@ -279,6 +285,9 @@ async function prepareFor(launcher, body, ip) {
   const tickerFree = () => { const h = tickerHold(form.symbol, launcher); if (h) throw new ApiError(refusal(form.symbol, h), 409); };
   tickerFree();
   const win = body.window ? window.validateWindow(body.window) : null;
+  // a custom pair on a classic launch (any token pump.fun accepts); checked before the image is pinned or a key taken
+  const quote = !win && body.pair ? await pairs.quoteOf(String(body.pair)) : null;
+  const pairInfo = quote ? (await window.lookup(quote.mint).catch(() => null))?.pair ?? null : null;
   const pair = win ? await window.validatePair(body.window.pair, body.window.pumpCreatorFeeBps) : null;
   if (win && form.devBuyLamports > 0n && !window.FIRST_BUY) throw new ApiError('A first buy is not available yet.');
   if (win && form.devBuyLamports > 0n) { const max = await window.firstBuyMaxLamports(); if (max == null || form.devBuyLamports > max) throw new ApiError(`The first buy can take at most ${window.FIRST_BUY_MAX_SUPPLY_PCT}% of the supply: ${max ? (Number(max) / 1e9).toFixed(3) : '?'} SOL at most.`); }
@@ -290,15 +299,15 @@ async function prepareFor(launcher, body, ip) {
   if (recent >= LAUNCHES_PER_WALLET_DAY) throw new ApiError('This wallet has launched enough coins for today', 429);
   // ⛔ every `pump` key handed out is spent whether or not the launch lands: a wallet gets a few a day and an IP a few an hour
   if (!vanity.hasReservation(launcher) && (vanity.issuedToWalletSince(launcher, 86_400) >= KEYS_PER_WALLET_DAY || (ip && vanity.issuedToIpSince(ip, 3_600) >= KEYS_PER_IP_HOUR))) throw new ApiError('Enough launches were started from here for now. Try again later.', 429);
-  // every CA ends in `pump`: the pool is checked BEFORE the image is pinned (so refusing costs nothing) and a key taken after
-  if (vanity.REQUIRED && !vanity.hasReservation(launcher) && vanity.available() === 0) throw new ApiError('No pump address is ready right now. Try again in a few minutes.', 503);
+  // every CA ends in `fair` (the vanity suffix): the pool is checked BEFORE the image is pinned (so refusing costs nothing) and a key taken after
+  if (vanity.REQUIRED && !vanity.hasReservation(launcher) && vanity.available() === 0) throw new ApiError('No fair address is ready right now. Try again in a few minutes.', 503);
   const shownImage = images.storeImage(image.bytes);
   const meta = publishMetadata({ image, form, shownImage });
   let mint = vanity.issueKey(launcher, ip);
   // the launcher's reserved key may already carry their previous launch: then it is spent, issue another
   for (let i = 0; mint && i < 3 && (await sol.conn.getAccountInfo(mint.publicKey, 'confirmed')); i++) { vanity.markLaunched(mint.publicKey.toBase58()); mint = vanity.issueKey(launcher, ip); }
   if (!mint && !vanity.REQUIRED) mint = Keypair.generate();
-  if (!mint) throw new ApiError('No pump address is ready right now. Try again in a few minutes.', 503);
+  if (!mint) throw new ApiError('No fair address is ready right now. Try again in a few minutes.', 503);
   const m = mint.publicKey.toBase58();
   const prior = one('SELECT * FROM launches WHERE mint = ?', m);
   if (prior && (prior.launcher !== launcher || !['prepared', 'failed'].includes(prior.status))) throw new ApiError('This launch is already in progress. Start again in 15 minutes.', 409);
@@ -313,7 +322,7 @@ async function prepareFor(launcher, body, ip) {
   } else {
     // the key is on disk before the transaction naming it as creator exists
     feeWallet = feeWallets.create().publicKey.toBase58();
-    ({ tx, hash, expectedTokens } = await buildLaunchTx({ mint, launcher, form, uri: meta.uri, feeWallet }));
+    ({ tx, hash, expectedTokens } = await buildLaunchTx({ mint, launcher, form, uri: meta.uri, feeWallet, quote }));
   }
   // Simulated BEFORE the wallet is asked to sign: whatever pump.fun would refuse is refused here, with a reason.
   const sim = await sol.conn.simulateTransaction(tx, { sigVerify: false, replaceRecentBlockhash: true }).catch(() => null);
@@ -325,10 +334,10 @@ async function prepareFor(launcher, body, ip) {
   // ⛔ checked AGAIN with no await between the check and the insert (sqlite is synchronous): two wallets preparing the same
   //    ticker at once both passed the first check seconds ago; only the first to reach this line gets a row
   tickerFree();
-  run(`INSERT INTO launches (mint, launcher, name, symbol, description, image, metadata_uri, socials_json, dev_buy_lamports, tx_hash, mint_secret, status, created_at, bumped_at, updated_at, kind, pool, config, size_sol, open_secs, window_minutes, holder_rewards, lock_ms, fee_wallet)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  run(`INSERT INTO launches (mint, launcher, name, symbol, description, image, metadata_uri, socials_json, dev_buy_lamports, tx_hash, mint_secret, status, created_at, bumped_at, updated_at, kind, pool, config, size_sol, open_secs, window_minutes, holder_rewards, lock_ms, fee_wallet, pair, pair_symbol)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   m, launcher, form.name, form.symbol, form.description, shownImage, meta.uri, JSON.stringify(form.socials), String(form.devBuyLamports), hash, JSON.stringify([...mint.secretKey]), now(), now(), now(),
-  win ? 'window' : 'pump', extra.pool ?? null, extra.config ?? null, win?.sizeSol ?? null, win?.openSecs ?? null, win?.windowMinutes ?? null, form.holderRewards ? 1 : 0, lockMs, feeWallet);
+  win ? 'window' : 'pump', extra.pool ?? null, extra.config ?? null, win?.sizeSol ?? null, win?.openSecs ?? null, win?.windowMinutes ?? null, form.holderRewards ? 1 : 0, lockMs, feeWallet, quote?.mint ?? null, quote ? (pairInfo?.symbol || (quote.mint === pairs.USDC ? 'USDC' : quote.mint.slice(0, 4))) : null);
   return { mint: m, kind: win ? 'window' : 'pump', transaction: sol.b64(tx), expectedTokens: String(expectedTokens), costSol: Number(win ? WINDOW_DEPLOY_COST_LAMPORTS : DEPLOY_COST_LAMPORTS) / 1e9 };
 }
 

@@ -77,7 +77,7 @@ export default function Create({ cfg }) {
     } catch (e) { if (!cancelled(e)) setError(e.message); return; }
     try {
       setStep('prepare');
-      const p = await api.prepareLaunch({ wallet, ...form, symbol: form.symbol.trim().toUpperCase(), imageData, tickerLock, devBuySol: windows ? 0 : Number(devBuy) || 0,
+      const p = await api.prepareLaunch({ wallet, ...form, symbol: form.symbol.trim().toUpperCase(), imageData, tickerLock, devBuySol: windows ? 0 : Number(devBuy) || 0, ...(!windows && pair ? { pair: pair.mint } : {}),
         ...(windows ? { holderRewards: rewards === 'holders', devBuySol: windows.limits?.firstBuy ? Number(devBuy) || 0 : 0, window: { openSecs, windowMinutes, sizeSol: size, maxWalletPct, holderRewards: rewards === 'holders', pair: pair?.mint || null, pumpCreatorFeeBps: pair ? pairFee : 0, ...(rules ? { rules } : {}) } } : {}) });
       setStep('sign');
       const signed = await w.signTransaction(p.transaction);
@@ -127,6 +127,9 @@ export default function Create({ cfg }) {
         </div>
         <div className="field"><label>x link</label><input value={form.twitter} onChange={set('twitter')} placeholder="(optional)" /></div>
         <div className="field"><label>website</label><input value={form.website} onChange={set('website')} placeholder="(optional)" /></div>
+        {!windows && <div className="field"><label>pair</label>
+          <PairPicker value={pair} onChange={setPair} disabled={Boolean(step)} />
+          <div className="muted xs">{pair ? `your coin trades against ${pair.symbol} on Pumpfun. buyers still pay in SOL here: the site routes every trade through ${pair.symbol} in one transaction.` : 'SOL by default, or pair your coin with any token Pumpfun accepts.'}</div></div>}
         {windows && (
           <div className="panel" style={{ gap: 12 }}>
             <div className="b" style={{ textAlign: 'center' }}>curve settings</div>
@@ -201,6 +204,7 @@ export default function Create({ cfg }) {
             <h2>choose how many [{form.symbol.trim().toUpperCase() || 'coins'}] you want to buy (optional)</h2>
             <p className="muted sm">tip: it's optional but buying a small amount of coins helps protect your coin from snipers</p>
           </> : <h2>launch [{form.symbol.trim().toUpperCase() || 'your coin'}]</h2>}
+          {pair && <p className="sm">paired with <b>{pair.symbol}</b>.</p>}
           <p className="muted sm">creator fees go into this coin's liquidity: once it graduates to PumpSwap they are added to its pool and the LP tokens are burned, so that liquidity can never be pulled.</p>
           {cfg.devBuyReady ? (
             <div className="amount">

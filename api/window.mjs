@@ -261,10 +261,11 @@ const pairQuote = sol.sharedMap(async (pair) => {
 }, 60_000);
 
 /** pump.fun's custom pairs a coin may migrate into (its quote-control list, deep liquidity only), shared for 10 minutes. */
-export const pairs = sol.shared(async () => [USDC_ENTRY, ...(await listPairs(sol.conn))], 600_000);
+// pump.family classic launches (7 Nov 2026): EVERY pair pump.fun accepts, no liquidity floor (operator's choice); window launches are off
+export const pairs = sol.shared(async () => [USDC_ENTRY, ...(await listPairs(sol.conn, { minLiquidity: 0 }))], 600_000);
 /** A pasted CA, looked up once per 10 minutes per mint. */
 export const lookup = sol.sharedMap(async (mint) => {
-  const r = await lookupPair(sol.conn, mint);
+  const r = await lookupPair(sol.conn, mint, { minLiquidity: 0 });
   if (r.transient) { const e = new Error(r.why); e.transient = true; throw e; } // a blip is answered but never cached for 10 minutes
   return r;
 }, 600_000, 500);

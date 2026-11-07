@@ -1,4 +1,4 @@
-// The pool of mint keypairs whose address ends in `hook`. Every pump.eco token uses two: one for the
+// The pool of mint keypairs whose address ends in `hook`. Every pump.family token uses two: one for the
 // window token on Meteora (handed to the creator's launch) and one for the pump.fun coin it becomes
 // (taken by the graduation service, never shown to anyone before that launch lands).
 //
@@ -13,9 +13,14 @@ import { Keypair } from "@solana/web3.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
-export const SUFFIX = process.env.VANITY_SUFFIX ?? "pump";
+// pump.family (operator, 7 Nov 2026): every CA ends in `fair` (`FAIR` cannot exist: base58 has no capital I). Was `pump`.
+export const SUFFIX = process.env.VANITY_SUFFIX ?? "fair";
+/** Only keys with the CURRENT suffix are counted or issued: a pool switched to a new suffix never hands out an old one.
+ *  GLOB, not LIKE: LIKE ignores case, and base58 does not. */
+const MINE = `pubkey GLOB '*${SUFFIX.replace(/[^1-9A-HJ-NP-Za-km-z]/g, '')}'`;
 /** Fresh keys held back for graduations: a launch is refused rather than leave a graduation keyless. */
-export const GRADUATION_RESERVE = Number(process.env.VANITY_GRADUATION_RESERVE ?? 5);
+// window launches are off on pump.family (hook closed 27 Oct): nothing to hold back for graduations by default
+export const GRADUATION_RESERVE = Number(process.env.VANITY_GRADUATION_RESERVE ?? 0);
 /** A creator who prepares again within this window gets the SAME key back: retries cannot drain the pool. */
 export const RESERVATION_SECS = 15 * 60;
 
@@ -39,7 +44,7 @@ export function addKey(db, keypair) {
   db.prepare("INSERT OR IGNORE INTO vanity (pubkey, secret, created_at) VALUES (?, ?, ?)").run(pk, Buffer.from(keypair.secretKey).toString("base64"), now());
 }
 
-export const freshCount = (db) => db.prepare("SELECT COUNT(*) n FROM vanity WHERE state = 'fresh'").get().n;
+export const freshCount = (db) => db.prepare(`SELECT COUNT(*) n FROM vanity WHERE state = 'fresh' AND ${MINE}`).get().n;
 const toKeypair = (secret) => Keypair.fromSecretKey(Buffer.from(secret, "base64"));
 
 /**
@@ -52,7 +57,7 @@ export function issueForLaunch(db, creator, ip = null, reserve = GRADUATION_RESE
   if (mine) return toKeypair(mine.secret);
   if (freshCount(db) <= reserve) return null;
   const row = db.prepare(`UPDATE vanity SET state = 'issued', holder = ?, ip = ?, issued_at = ?
-    WHERE pubkey = (SELECT pubkey FROM vanity WHERE state = 'fresh' ORDER BY created_at LIMIT 1) RETURNING secret`).get(creator, ip, now());
+    WHERE pubkey = (SELECT pubkey FROM vanity WHERE state = 'fresh' AND ${MINE} ORDER BY created_at LIMIT 1) RETURNING secret`).get(creator, ip, now());
   return row ? toKeypair(row.secret) : null;
 }
 
@@ -74,7 +79,7 @@ export function takeForGraduation(db, windowMint) {
   const mine = db.prepare("SELECT secret FROM vanity WHERE state = 'graduation' AND holder = ?").get(windowMint);
   if (mine) return toKeypair(mine.secret);
   const row = db.prepare(`UPDATE vanity SET state = 'graduation', holder = ?, issued_at = ?
-    WHERE pubkey = (SELECT pubkey FROM vanity WHERE state = 'fresh' ORDER BY created_at LIMIT 1) RETURNING secret`).get(windowMint, now());
+    WHERE pubkey = (SELECT pubkey FROM vanity WHERE state = 'fresh' AND ${MINE} ORDER BY created_at LIMIT 1) RETURNING secret`).get(windowMint, now());
   return row ? toKeypair(row.secret) : null;
 }
 

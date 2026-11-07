@@ -51,39 +51,80 @@ async function step(keeper, ixs, signers, label) {
   return out;
 }
 
-/** One coin, one pass. Returns what it did, for the log. */
+/** A custom pair's mint, token program and decimals (from the chain), cached for the process. */
+const pairInfo = new Map();
+async function quoteOfRow(row) {
+  if (!row.pair) return null;
+  if (!pairInfo.has(row.pair)) {
+    const info = await sol.conn.getAccountInfo(new PublicKey(row.pair), 'confirmed');
+    if (!info) throw new Error(`pair mint ${row.pair} unreadable`);
+    pairInfo.set(row.pair, { mint: row.pair, tokenProgram: info.owner.toBase58(), decimals: info.data[44], symbol: row.pair_symbol || row.pair.slice(0, 4) });
+  }
+  return pairInfo.get(row.pair);
+}
+/** The SOL thresholds in pair units at today's price (null when the pair has no price: the pass waits). */
+async function thresholdsFor(quote) {
+  if (!quote) return { collect: MIN_COLLECT, liq: MIN_LIQ, deposit: MIN_DEPOSIT, unit: 1e9, name: 'SOL' };
+  const [qUsd, sUsd] = await Promise.all([sol.quoteUsdOf(quote.mint).catch(() => null), sol.solUsd().catch(() => null)]);
+  if (!(qUsd > 0 && sUsd > 0)) return null;
+  const perLamport = (sUsd / 1e9) / qUsd * 10 ** quote.decimals; // pair units worth one lamport
+  const conv = (l) => BigInt(Math.max(1, Math.ceil(Number(l) * perLamport)));
+  return { collect: conv(MIN_COLLECT), liq: conv(MIN_LIQ), deposit: conv(MIN_DEPOSIT), unit: 10 ** quote.decimals, name: quote.symbol };
+}
+
+/** One coin, one pass. Returns what it did, for the log. A custom-pair coin works in its pair token throughout. */
 export async function passCoin(row, keeper) {
   const { mint, fee_wallet: fw, symbol } = row;
-  let st = await feeState(sol.conn, { mint, feeWallet: fw, reserve: RESERVE });
+  const quote = await quoteOfRow(row);
+  const read = () => feeState(sol.conn, { mint, feeWallet: fw, reserve: RESERVE, quote });
+  let st = await read();
   if (!st.graduated) return 'on its curve';
+  const T = await thresholdsFor(quote);
+  if (!T) return 'no price for the pair yet';
+  const fmt = (x) => `${(Number(x) / T.unit).toFixed(4)} ${T.name}`;
   const did = [];
-  if (st.waiting >= MIN_COLLECT) {
-    const before = st.wallet;
-    const r = await step(keeper, await collectIxs(sol.conn, { mint, feeWallet: fw, payer: keeper.publicKey, graduated: true }), [], `${symbol} collect ${(Number(st.waiting) / 1e9).toFixed(4)} SOL`);
+  // a custom-pair fee wallet earns no SOL: the keeper gives it the SOL its accounts' rent needs (its coin, LP, volume
+  // tracker accounts...), checked before every step that may create one (one top-up of 0.01 SOL ran dry at the deposit, e2e)
+  const ensureRent = async () => {
+    if (!quote || st.wallet >= RESERVE / 2n) return true;
+    const { SystemProgram } = await import('@solana/web3.js');
+    const add = RESERVE - st.wallet;
+    const r = await step(keeper, [SystemProgram.transfer({ fromPubkey: keeper.publicKey, toPubkey: new PublicKey(fw), lamports: add })], [], `${symbol} rent for the fee wallet ${(Number(add) / 1e9).toFixed(4)} SOL`);
     if (r.result === 'dry') return 'dry';
-    st = await feeState(sol.conn, { mint, feeWallet: fw, reserve: RESERVE });
-    if (r.result === 'ok') { record(r.sig, mint, 'collect', { lamports: st.wallet - before }); did.push('collected'); }
+    if (r.result === 'ok') record(r.sig, mint, 'rent', { lamports: add });
+    st = await read();
+    return r.result === 'ok';
+  };
+  if ((await ensureRent()) === 'dry') return 'dry';
+  if (st.waiting >= T.collect) {
+    const before = st.held;
+    const r = await step(keeper, await collectIxs(sol.conn, { mint, feeWallet: fw, payer: keeper.publicKey, graduated: true, quote }), [], `${symbol} collect ${fmt(st.waiting)}`);
+    if (r.result === 'dry') return 'dry';
+    st = await read();
+    if (r.result === 'ok') { record(r.sig, mint, 'collect', { lamports: st.held - before }); did.push('collected'); }
   }
   const w = feeWallets.load(fw);
   const deposit = async () => {
-    const d = await depositAndBurnIxs(sol.conn, { mint, feeWallet: fw, tokens: st.tokens, maxLamports: st.spare });
-    if (!d || d.quoteMax < MIN_DEPOSIT) return false; // dust: waits for more fees
+    if ((await ensureRent()) === 'dry') return 'dry';
+    const d = await depositAndBurnIxs(sol.conn, { mint, feeWallet: fw, tokens: st.tokens, maxLamports: st.spare, quote });
+    if (!d || d.quoteMax < T.deposit) return false; // dust: waits for more fees
     const before = st;
-    const r = await step(keeper, d.ixs, [w], `${symbol} deposit ${d.base} units + up to ${(Number(d.quoteMax) / 1e9).toFixed(4)} SOL, burn ${d.lp} LP`);
+    const r = await step(keeper, d.ixs, [w], `${symbol} deposit ${d.base} units + up to ${fmt(d.quoteMax)}, burn ${d.lp} LP`);
     if (r.result === 'dry') return 'dry';
-    st = await feeState(sol.conn, { mint, feeWallet: fw, reserve: RESERVE });
-    if (r.result === 'ok') { record(r.sig, mint, 'deposit', { lamports: before.wallet - st.wallet, tokens: before.tokens - st.tokens, lp: d.lp }); did.push('deposited + burned LP'); }
+    st = await read();
+    if (r.result === 'ok') { record(r.sig, mint, 'deposit', { lamports: before.held - st.held, tokens: before.tokens - st.tokens, lp: d.lp }); did.push('deposited + burned LP'); }
     return r.result === 'ok';
   };
-  // coins left by an earlier pass first, then buy-and-deposit rounds until the spare SOL is under the minimum
+  // coins left by an earlier pass first, then buy-and-deposit rounds until what is spare is under the minimum
   if (st.tokens > 0n && st.spare > 0n && (await deposit()) === 'dry') return 'dry';
-  for (let round = 0; round < 3 && st.spare >= MIN_LIQ; round++) {
-    const spend = await buyShare(sol.conn, { mint, feeWallet: fw, lamports: st.spare }), before = st;
-    const r = await step(keeper, await buyIxs(sol.conn, { mint, feeWallet: fw, lamports: spend }), [w], `${symbol} buy with ${(Number(spend) / 1e9).toFixed(4)} SOL`);
+  for (let round = 0; round < 3 && st.spare >= T.liq; round++) {
+    if ((await ensureRent()) === 'dry') return 'dry';
+    const spend = await buyShare(sol.conn, { mint, feeWallet: fw, lamports: st.spare, quote }), before = st;
+    const r = await step(keeper, await buyIxs(sol.conn, { mint, feeWallet: fw, lamports: spend, quote }), [w], `${symbol} buy with ${fmt(spend)}`);
     if (r.result === 'dry') return 'dry';
-    st = await feeState(sol.conn, { mint, feeWallet: fw, reserve: RESERVE });
+    st = await read();
     if (r.result !== 'ok') break;
-    record(r.sig, mint, 'buy', { lamports: before.wallet - st.wallet, tokens: st.tokens - before.tokens }); did.push('bought');
+    record(r.sig, mint, 'buy', { lamports: before.held - st.held, tokens: st.tokens - before.tokens }); did.push('bought');
     if (!(st.tokens > 0n && st.spare > 0n) || (await deposit()) !== true) break;
   }
   return did.length ? did.join(', ') : 'nothing to do';
@@ -91,7 +132,7 @@ export async function passCoin(row, keeper) {
 
 /** Every live coin with a fee wallet: graduated ones (one batched curve read tells) get a pass. */
 export async function pass(keeper) {
-  const rows = all("SELECT mint, symbol, fee_wallet FROM launches WHERE fee_wallet IS NOT NULL AND status = 'live' AND kind = 'pump'");
+  const rows = all("SELECT mint, symbol, fee_wallet, pair, pair_symbol FROM launches WHERE fee_wallet IS NOT NULL AND status = 'live' AND kind = 'pump'");
   let graduated = 0;
   for (let i = 0; i < rows.length; i += 100) {
     const chunk = rows.slice(i, i + 100);

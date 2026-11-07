@@ -89,6 +89,9 @@ addColumn('launches', 'origin', "TEXT NOT NULL DEFAULT 'site'");
 addColumn('launches', 'lock_ms', 'INTEGER');
 // creator fees → liquidity (7 Nov 2026): the coin's pump.fun creator, a wallet this site holds (api/feewallets.mjs)
 addColumn('launches', 'fee_wallet', 'TEXT');
+// custom pair (7 Nov 2026): the token a classic coin is paired with (NULL = SOL) and its symbol at launch
+addColumn('launches', 'pair', 'TEXT');
+addColumn('launches', 'pair_symbol', 'TEXT');
 // every liquidity keeper transaction that landed (api/liquidity.mjs): what the coin page adds up
 db.exec(`CREATE TABLE IF NOT EXISTS liquidity (
   sig TEXT PRIMARY KEY, mint TEXT NOT NULL, step TEXT NOT NULL, lamports TEXT NOT NULL DEFAULT '0', tokens TEXT NOT NULL DEFAULT '0',

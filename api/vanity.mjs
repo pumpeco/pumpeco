@@ -1,5 +1,5 @@
 /**
- * ONE pool of `…pump` mint keys for every address this site creates: the window token's mint at launch and the pump.fun
+ * ONE pool of `…fair` mint keys (was `…pump` until 7 Nov 2026; hk/lib/vanity.mjs SUFFIX) for every address this site creates: the window token's mint at launch and the pump.fun
  * coin's mint at graduation (hk/lib/vanity.mjs on the graduator's ledger, with its graduation reserve). Keys arrive in
  * data/vanity-incoming from tools/grind (`npm run grind`, deploy/keep-vanity.sh) and are imported every minute.
  *
@@ -12,7 +12,7 @@ import * as hk from '../hk/lib/vanity.mjs';
 import { ledger, DATA_DIR } from './window.mjs';
 
 export const SUFFIX = hk.SUFFIX;
-/** Every CA ends in `pump` (operator, 24 Oct 2026): an empty pool refuses the launch. VANITY_REQUIRED=0 is for tests only. */
+/** Every CA ends in the suffix (`fair` since 7 Nov 2026, `pump` before): an empty pool refuses the launch. VANITY_REQUIRED=0 is for tests only. */
 export const REQUIRED = env('VANITY_REQUIRED', '1') !== '0';
 export const RESERVATION_MS = hk.RESERVATION_SECS * 1000;
 export const GRADUATION_RESERVE = hk.GRADUATION_RESERVE;
