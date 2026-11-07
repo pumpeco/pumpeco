@@ -35,7 +35,7 @@ const KEYS_PER_IP_HOUR = num('KEYS_PER_IP_HOUR', 3);
 const MAX_TX_BYTES = 1232;
 /** Rent for the mint, curve, metadata and token accounts pump.fun creates, plus fees: about 0.025 SOL on mainnet. */
 export const DEPLOY_COST_LAMPORTS = 25_000_000n;
-/** A window launch: Meteora pool + hook accounts, measured ~0.045 SOL on pump.eco; held with room. */
+/** A window launch: Meteora pool + hook accounts, measured ~0.045 SOL on pump.family; held with room. */
 export const WINDOW_DEPLOY_COST_LAMPORTS = 60_000_000n;
 
 /**
@@ -58,7 +58,9 @@ export const launchAllowed = (wallet) => Boolean(wallet) && (getKv('launchAllow'
 const lutShared = sol.shared(async () => { const a = env('LOOKUP_TABLE', '') || getKv('launchLut', null); return a ? loadLookupTable(sol.conn, a) : null; }, 600_000);
 /** ⛔ "No table yet" is never cached: the moment scripts/make-lut.mjs records one, the next launch uses it. */
 export const lookupTable = async () => { const t = await lutShared().catch(() => null); if (!t) lutShared.forget(); return t; };
-export const devBuyReady = async () => Boolean(await lookupTable());
+// first buys on classic launches: OFF on pump.family (operator, 6 Nov 2026); FIRST_BUYS=1 plus the lookup table turns them on
+export const FIRST_BUYS = env('FIRST_BUYS', '0') === '1';
+export const devBuyReady = async () => FIRST_BUYS && Boolean(await lookupTable());
 const budget = (units) => [ComputeBudgetProgram.setComputeUnitLimit({ units }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports: PRIORITY })];
 const msgHash = (tx) => createHash('sha256').update(tx.message.serialize()).digest('hex');
 
@@ -89,6 +91,7 @@ export function validate(body) {
   const description = clean(body.description, DESCRIPTION_MAX);
   const devBuy = Number(body.devBuySol || 0);
   if (!(devBuy >= 0 && devBuy <= MAX_DEV_BUY_SOL)) throw new ApiError(`The first buy is 0 to ${MAX_DEV_BUY_SOL} SOL`);
+  if (devBuy > 0 && !FIRST_BUYS && !body.window) throw new ApiError('First buys are off on this site. Launch without one.');
   // pump.fun's creator-rewards choice, fixed at launch: the creator keeps them (the fee schedule) or they go to holders forever
   const holderRewards = body.holderRewards === true || body.holderRewards === 'holders';
   const socials = {
@@ -209,7 +212,7 @@ export async function prepare(body, ip = null) {
   const launcher = String(body.wallet || '');
   if (!launchOpen() && !launchAllowed(launcher)) throw new ApiError('Launching opens soon. Check back in a little while.', 503);
   if (body.window && !(await window.ready())) throw new ApiError('Window launches are being set up on this server. Try again in a few minutes.', 503);
-  // WINDOW_ONLY=1 (pump.eco): every coin launched here is a window launch; a plain pump.fun launch is never offered
+  // WINDOW_ONLY=1 (pump.eco until 6 Nov 2026): every coin launched here is a window launch; a plain pump.fun launch is never offered
   if (!body.window && WINDOW_ONLY) throw new ApiError('Launching opens soon. Check back in a little while.', 503);
   if (!sol.isAddress(launcher)) throw new ApiError('Connect a wallet first.', 401);
   if (preparing.has(launcher)) throw new ApiError('This wallet is already preparing a launch. Wait for it to finish.', 409);

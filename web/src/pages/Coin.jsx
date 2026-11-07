@@ -7,8 +7,6 @@ import { Modal, Spinner } from '../components/Chrome.jsx';
 import { usdK, ago, short, shortName, colorOf, lamportsToSol, tokens, pumpLink } from '../lib/format.js';
 import { RulesLines } from '../components/Rules.jsx';
 import { parseWallets } from '../lib/rulesText.js';
-
-const lockLen = (ms) => (ms >= 2 * 86_400_000 ? `${Math.round(ms / 86_400_000)} days` : `${Math.round(ms / 3_600_000)} hours`);
 import { fillList } from '../lib/lists.js';
 
 const fmtLeft = (secs) => { const s = Math.max(0, Math.floor(secs)); if (s >= 86400) return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`; if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; if (s >= 60) return `${Math.floor(s / 60)}m ${s % 60}s`; return `${s}s`; };
@@ -40,7 +38,6 @@ function WindowPanel({ c }) {
       {w.phase === 'graduated' && w.raise != null && <p className="muted xs" style={{ margin: 0 }}>the window raised {w.raise.toFixed(3)} SOL; the coin opened on pump.fun at that market cap.</p>}
       {w.phase === 'graduated' && w.raise == null && <p className="muted xs" style={{ margin: 0 }}>the curve filled; the coin opened on pump.fun at that market cap.</p>}
       {c.holderRewards && <div className="muted xs">creator rewards go to the holders (pump.fun holder rewards).</div>}
-      {c.tickerLock && c.origin !== 'external' && <div className="muted xs">ticker lock: {lockLen(c.tickerLock.ms)}{c.tickerLock.until > Date.now() ? `, nobody can launch ${c.symbol} here until ${new Date(c.tickerLock.until).toLocaleString()}` : `, ended`}.</div>}
       {w.rules?.any && w.phase !== 'graduated' && w.phase !== 'ended' && <div className="xs" style={{ display: 'grid', gap: 4 }}>
         <div className="muted">rules on its curve, enforced by the hook on every trade and send until it migrates to pump.fun:</div>
         <RulesLines lines={w.rules.lines} className="xs" />
@@ -105,8 +102,8 @@ export default function Coin({ mint, cfg }) {
     return () => clearInterval(id);
   }, [load]);
 
-  if (error) return <main className="wrap"><div className="narrow"><Link href="/" className="bracket back">[go back]</Link><div className="err">{error}</div></div></main>;
-  if (!c) return <main className="wrap"><div className="empty" style={{ marginTop: 40 }}>loading…</div></main>;
+  if (error) return <main className="wrap"><div className="narrow"><Link href="/" className="bracket">[go back]</Link><div className="err">{error}</div></div></main>;
+  if (!c) return <main className="wrap"><div className="empty">loading…</div></main>;
   const curveProgress = Math.round((c.progress ?? 0) * 100);
   // the bar to beat: the current king's cap, or the crown's threshold when nobody is crowned yet
   const kothBar = Math.max(c.kothUsd ?? KOTH_USD, c.king && c.king.mint !== c.mint ? c.king.capUsd ?? 0 : 0);
@@ -114,20 +111,15 @@ export default function Coin({ mint, cfg }) {
   const koth = isKing ? 100 : Math.min(100, Math.round(((c.capUsd ?? 0) / kothBar) * 100));
   return (
     <main className="wrap">
-      <Link href="/" className="bracket back">[go back]</Link>
+      <div style={{ marginTop: 8 }}><Link href="/" className="bracket">[go back]</Link></div>
       {c.status === 'created' && <div className="ok">your launch was sent and is confirming on chain. this page updates by itself; the coin is tradeable once it shows up on pump.fun.</div>}
       <div className="coinhead">
-        <img src={c.image} alt="" />
-        <div className="t">
-        <h1>{c.name} ({c.symbol})</h1>
-        <div className="facts">
+        <span className="b">{c.name} ({c.symbol})</span>
         <span className="muted">created by <i className="avatar" style={{ background: colorOf(c.creator) }} /> <span className="blue">{shortName(c.creator)}</span></span>
-        <span className="green b">market cap: {usdK(c.capUsd)}</span>
+        <span className="green">market cap: {usdK(c.capUsd)}</span>
         <span className="muted">replies: {c.replyCount}</span>
         {c.kind !== 'window' && c.holderRewards && <span className="yellow sm">creator rewards to holders</span>}
         {c.kind === 'window' ? (c.window?.pumpMint && <a className="bracket sm" href={pumpLink(c.window.pumpMint)} target="_blank" rel="noreferrer">[view on pump.fun]</a>) : <a className="bracket sm" href={pumpLink(c.mint)} target="_blank" rel="noreferrer">[view on pump.fun]</a>}
-        </div>
-        </div>
       </div>
       <div className="cols">
         <section>
@@ -217,7 +209,7 @@ function Thread({ c, onPosted }) {
     <div className="thread">
       <div className="reply">
         <div className="meta"><i className="avatar" style={{ background: colorOf(c.creator) }} /><span className="blue">{shortName(c.creator)}</span> (dev) <span>{ago(c.createdAt)}</span>{c.sig && <a className="muted" href={`https://solscan.io/tx/${c.sig}`} target="_blank" rel="noreferrer">launch tx</a>}</div>
-        <div className="row" style={{ alignItems: 'flex-start' }}><img src={c.image} alt="" style={{ width: 96, height: 96, borderRadius: 12, objectFit: 'cover' }} /><div><span className="b">{c.name} ({c.symbol})</span>{c.description ? `: ${c.description}` : ''}</div></div>
+        <div className="row" style={{ alignItems: 'flex-start' }}><img src={c.image} alt="" style={{ width: 96, height: 96, borderRadius: 6, objectFit: 'cover' }} /><div><span className="b">{c.name} ({c.symbol})</span>{c.description ? `: ${c.description}` : ''}</div></div>
       </div>
       {c.replies.map((r) => (
         <div className="reply" key={r.id}>
@@ -247,7 +239,7 @@ function Trades({ c, chart }) {
   const rows = chart?.trades?.length ? chart.trades.map((t) => ({ ...t, at: t.ts })) : c.trades;
   if (!rows.length) return <div className="empty">{chart && !chart.complete ? 'reading the trades from the chain…' : 'no trades yet.'}</div>;
   return (
-    <div className="tablewrap"><table className="trades">
+    <table className="trades">
       <thead><tr><th>account</th><th>type</th><th>SOL</th><th>{c.symbol}</th><th>date</th><th>transaction</th></tr></thead>
       <tbody>
         {rows.map((t) => (
@@ -261,7 +253,7 @@ function Trades({ c, chart }) {
           </tr>
         ))}
       </tbody>
-    </table></div>
+    </table>
   );
 }
 

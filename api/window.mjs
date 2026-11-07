@@ -1,6 +1,6 @@
 /**
  * Window launches: a Token-2022 coin with our transfer hook on a Meteora curve shaped like pump.fun's (the stack ported from
- * pump.eco, hk/). The creator sets when buying opens (nobody, the creator included, can buy before: no block-zero devving) and
+ * pump.family, hk/). The creator sets when buying opens (nobody, the creator included, can buy before: no block-zero devving) and
  * when the window closes. At the close the graduator (api/graduator.mjs) fills what is left of the curve, takes 99% of the
  * SOL back out through Meteora's migration fee, creates the pump.fun coin with the real raise and pushes every holder their
  * share: the coin lands on pump.fun at whatever market cap the window ended at. If buyers fill the curve earlier, it
@@ -42,7 +42,7 @@ export function platformKeypair() {
 export const PLATFORM = platformKeypair().publicKey;
 
 /**
- * WINDOW_MODE: 'fill' (default, pump.eco's way) = the coin migrates to pump.fun when its curve FILLS at the cap the creator picked;
+ * WINDOW_MODE: 'fill' (default, pump.family's way) = the coin migrates to pump.fun when its curve FILLS at the cap the creator picked;
  * buying never closes, nothing is fronted, the hot wallet only needs a fee float. 'deadline' = the creator also sets a time
  * window; at its end the platform fills the rest of the curve (capital on the hot wallet) and the coin migrates at whatever cap.
  */
@@ -90,12 +90,24 @@ export async function sizes() {
   const recommended = st.pump ? sizeAt(st.pump, DEFAULT_SIZE_FRACTION) : null; // what the create form selects by default
   return Object.keys(st.flatConfigs || {}).map(Number).sort((a, b) => a - b).map((s) => ({ sizeSol: s, capSol: st.pump ? st.pump.capAt(s) : null, startCapSol: st.pump ? st.pump.capAt(0) : null, available: covered(s), recommended: s === recommended }));
 }
-export async function ready() { const s = await sizes(); return s.some((x) => x.available) && Boolean(await lutShared()); }
+// the hook program must still exist on chain (it was closed 27 Oct 2026): a closed hook means no window launches at all
+// (a closed upgradeable program keeps its executable stub; only its program-data account disappears, so read that)
+const hookAlive = sol.shared(async () => {
+  const p = await sol.conn.getAccountInfo(HOOK_PROGRAM);
+  if (!p?.executable) return false;
+  if (p.data.length < 36 || p.data.readUInt32LE(0) !== 2) return true; // not an upgradeable-loader stub
+  const d = await sol.conn.getAccountInfo(new PublicKey(p.data.subarray(4, 36)));
+  return Boolean(d && d.data.length > 45);
+}, 60_000);
+export async function ready() {
+  if (env('WINDOWS_OFF', '0') === '1' || !(await hookAlive().catch(() => false))) return false;
+  const s = await sizes(); return s.some((x) => x.available) && Boolean(await lutShared());
+}
 
 /** Validates the creator's window settings. */
 export function validateWindow(w) {
   const openSecs = Math.round(Number(w?.openSecs ?? 60));
-  // fill mode: no deadline at all (closeSecs 0): the coin trades on its curve until it fills, like pump.eco
+  // fill mode: no deadline at all (closeSecs 0): the coin trades on its curve until it fills, like pump.family
   const windowMinutes = MODE === 'deadline' ? Math.round(Number(w?.windowMinutes ?? 60)) : 0;
   const sizeSol = Number(w?.sizeSol);
   const maxWalletPct = Number(w?.maxWalletPct ?? 0);

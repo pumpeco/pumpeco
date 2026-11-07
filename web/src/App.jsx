@@ -12,12 +12,12 @@ const FALLBACK = { launchReady: false, devBuyReady: false, maxDevBuySol: 50, dep
 const B58 = '[1-9A-HJ-NP-Za-km-z]{32,44}';
 
 function Page({ path, cfg }) {
-  if (path === '/') return <Board cfg={cfg} />;
+  if (path === '/') return <Board />;
   if (path === '/create') return <Create cfg={cfg} />;
   if (path === '/how') return <How cfg={cfg} />;
   const m = path.match(new RegExp(`^/coin/(${B58})$`));
   if (m) return <Coin mint={m[1]} cfg={cfg} />;
-  return <main className="wrap"><div className="empty" style={{ marginTop: 40 }}>there is nothing at {path}</div></main>;
+  return <main className="wrap"><div className="empty">there is nothing at {path}</div></main>;
 }
 
 export default function App() {
@@ -31,7 +31,6 @@ export default function App() {
   }, []);
   return (
     <WalletProvider>
-      <div className="bgfx" aria-hidden="true" />
       <Header />
       <Ticker />
       <Page path={path} cfg={cfg} />

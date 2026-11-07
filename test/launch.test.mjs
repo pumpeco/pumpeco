@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 process.env.DB_PATH = '/tmp/oldpump-test.db';
+process.env.FIRST_BUYS = '1'; // the first-buy checks below need the switch on (pump.family runs with it off)
 const { validate, readImage, checkLaunchTx } = await import('../api/launch.mjs');
 const { tokensForSol, solForTokens } = await import('../lib/pump.mjs');
 const BN = (await import('bn.js')).default;

@@ -5,9 +5,7 @@ import CoinCard from '../components/CoinCard.jsx';
 import { Crown } from '../components/Chrome.jsx';
 import { ago, usdK } from '../lib/format.js';
 
-export default function Board({ cfg = {} }) {
-  const [copied, setCopied] = useState(false);
-  const official = cfg.official;
+export default function Board() {
   const [data, setData] = useState(null);
   const [sort, setSort] = useState('created');
   const [order, setOrder] = useState('desc');
@@ -36,26 +34,14 @@ export default function Board({ cfg = {} }) {
 
   return (
     <main className="wrap">
-      <section className="hero">
-        <img className="hero-mark" src="/icon-512.png" alt="" width="176" height="176" />
-        <h1 className="grad">Pump Eco</h1>
-        <div className="row">
-          <Link href="/create" className="btn light big">Launch</Link>
-          <Link href="/how" className="btn ghost big">How it works</Link>
-        </div>
-        {official && (
-          <div className="ca"><b>CA:</b><Link href={`/coin/${official.mint}`} className="ca-addr">{official.mint}</Link>
-            <button className="copy" onClick={() => { navigator.clipboard?.writeText(official.mint).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}>{copied ? 'copied' : 'copy'}</button></div>
-        )}
-      </section>
+      <div className="hero"><Link href="/create">[launch coin]</Link></div>
       {data?.king && (
         <>
-          <div className="section-title"><div className="koth-title"><Crown /><h2>King of the hill</h2><Crown /></div></div>
-          <div className="koth"><div><CoinCard c={data.king} className="row-card" flash={anim && flash.has(data.king.mint)} />
-            <div className="muted xs" style={{ textAlign: 'center' }}>{data.king.crowned ? `crowned ${ago(data.king.crownedAt)} at ${usdK(data.king.capUsd)} mcap` : `leading at ${usdK(data.king.capUsd)} mcap; the crown is taken at ${usdK(data.kothUsd)}`}</div></div></div>
+          <div className="koth-title"><Crown />King of the hill<Crown /></div>
+          <div className="koth"><div><CoinCard c={data.king} flash={anim && flash.has(data.king.mint)} />
+            <div className="muted xs" style={{ textAlign: 'center', marginTop: 4 }}>{data.king.crowned ? `crowned ${ago(data.king.crownedAt)} at ${usdK(data.king.capUsd)} mcap` : `leading at ${usdK(data.king.capUsd)} mcap; the crown is taken at ${usdK(data.kothUsd)}`}</div></div></div>
         </>
       )}
-      <div style={{ height: 56 }} />
       <div className="filters">
         <form className="search" onSubmit={(e) => { e.preventDefault(); setQuery(q.trim()); }}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="search for token" />

@@ -10,7 +10,7 @@ import bs58 from 'bs58';
 import fsSync from 'node:fs';
 
 const DB = `/tmp/oldpump-e2e-${process.pid}.db`;
-Object.assign(process.env, { SOLANA_RPC: 'http://127.0.0.1:8981', DB_PATH: DB, DATA_DIR: `/tmp/oldpump-e2e-data-${process.pid}`, VANITY_REQUIRED: '0', LAUNCH_OPEN: '1', PUBLIC_URL: 'http://127.0.0.1:5480', PINATA_JWT: 'e2e', PINATA_UPLOADS: 'http://127.0.0.1:5398', VANITY_INCOMING: `/tmp/oldpump-e2e-in-${process.pid}`, LAUNCH_PRIORITY_MICROLAMPORTS: '1000', TRADE_PRIORITY_MICROLAMPORTS: '1000', LAUNCHES_PER_WALLET_DAY: '2' });
+Object.assign(process.env, { SOLANA_RPC: 'http://127.0.0.1:8981', DB_PATH: DB, DATA_DIR: `/tmp/oldpump-e2e-data-${process.pid}`, VANITY_REQUIRED: '0', LAUNCH_OPEN: '1', PUBLIC_URL: 'http://127.0.0.1:5480', PINATA_JWT: 'e2e', PINATA_UPLOADS: 'http://127.0.0.1:5398', VANITY_INCOMING: `/tmp/oldpump-e2e-in-${process.pid}`, LAUNCH_PRIORITY_MICROLAMPORTS: '1000', TRADE_PRIORITY_MICROLAMPORTS: '1000', LAUNCHES_PER_WALLET_DAY: '2', FIRST_BUYS: '1' });
 let pins = 0;
 const stub = http.createServer((req, res) => { req.resume(); req.on('end', () => { pins++; res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ data: { cid: `bafkrei${bs58.encode(Keypair.generate().publicKey.toBytes()).toLowerCase().slice(0, 52)}` } })); }); }).listen(5398);
 
